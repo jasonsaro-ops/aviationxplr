@@ -7,7 +7,9 @@ const CONFIG = {
   maxZoom: 18, // tiles overscale past native
 
   // Update cadence (ms)
-  refreshInterval: 2 * 60 * 1000, // 2 minutes
+  refreshInterval: 2 * 60 * 1000, // 2 minutes (TFRs etc)
+  trafficRefreshInterval: 8 * 1000, // ADS-B poll every 8s
+  trafficAnimHz: 20, // animation frames per second
 
   // Data paths (relative for GitHub Pages)
   airportsGeoJSON: 'data/namer_samer_airports.geojson',

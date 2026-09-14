@@ -9,6 +9,8 @@ const MapApp = {
     metar: null
   },
   airportIndex: {},      // ident -> marker
+  aircraftState: {},     // hex -> { marker, lat, lon, track, targetLat, targetLon, targetTrack, ... }
+  _trafficAnim: null,
   filters: {
     large: true, medium: true, small: false, heli: false, seaplane: false, scheduled: false
   },
@@ -260,24 +262,19 @@ const MapApp = {
 
 
 
-  renderTraffic() {
-    this.layers.traffic.clearLayers();
-    const list = DataStore.traffic || [];
-    // Cap markers for performance when zoomed out
-    const zoom = this.map.getZoom();
-    let draw = list;
-    if (zoom < 5 && list.length > 400) {
-      // sample evenly
-      const step = Math.ceil(list.length / 400);
-      draw = list.filter((_, i) => i % step === 0);
-    } else if (zoom < 7 && list.length > 900) {
-      const step = Math.ceil(list.length / 900);
-      draw = list.filter((_, i) => i % step === 0);
-    }
 
-    draw.forEach(ac => {
+  /** Upsert traffic markers; animate between samples */
+  renderTraffic() {
+    const list = DataStore.traffic || [];
+    const now = performance.now();
+    const seen = new Set();
+
+    list.forEach(ac => {
       if (ac.lat == null || ac.lon == null) return;
-      const rot = ac.track != null ? ac.track : 0;
+      const hex = (ac.icao24 || ac.hex || '').toLowerCase();
+      if (!hex) return;
+      seen.add(hex);
+
       const altFt = ac.alt != null ? ac.alt * 3.28084 : null;
       let color = '#9aa8b8';
       if (altFt == null || ac.onGround) color = '#6a7a8a';
@@ -286,31 +283,71 @@ const MapApp = {
       else if (altFt < 35000) color = '#f0c040';
       else color = '#ff6b8a';
 
-      const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">' +
-        '<g transform="rotate(' + rot + ' 12 12)">' +
-        '<path d="M12 2 L15 11 L22 12 L15 13 L12 22 L9 13 L2 12 L9 11 Z" fill="' + color + '" stroke="#0a0e14" stroke-width="1"/>' +
-        '</g></svg>';
-      const icon = L.divIcon({
-        className: 'ac-marker',
-        html: svg,
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
-      });
-      const label = (ac.callsign || ac.icao24 || '').trim();
-      const m = L.marker([ac.lat, ac.lon], {
-        icon,
-        title: label,
-        riseOnHover: true,
-        keyboard: false,
-        opacity: 0.95
-      });
+      const track = ac.track != null ? Number(ac.track) : 0;
+      let st = this.aircraftState[hex];
+
+      if (!st) {
+        const svg = this._planeSvg(track, color);
+        const icon = L.divIcon({
+          className: 'ac-marker',
+          html: svg,
+          iconSize: [18, 18],
+          iconAnchor: [9, 9]
+        });
+        const marker = L.marker([ac.lat, ac.lon], {
+          icon,
+          interactive: true,
+          keyboard: false,
+          zIndexOffset: 600
+        });
+        marker.on('click', () => UI.showTraffic(this.aircraftState[hex]?.data || ac));
+        this.layers.traffic.addLayer(marker);
+        st = {
+          marker,
+          lat: ac.lat,
+          lon: ac.lon,
+          track,
+          targetLat: ac.lat,
+          targetLon: ac.lon,
+          targetTrack: track,
+          color,
+          updated: now,
+          data: ac
+        };
+        this.aircraftState[hex] = st;
+      } else {
+        // new sample → set targets; keep current for lerp
+        st.targetLat = ac.lat;
+        st.targetLon = ac.lon;
+        st.targetTrack = track;
+        st.color = color;
+        st.updated = now;
+        st.data = ac;
+        // update icon color if needed
+        st.marker.setIcon(L.divIcon({
+          className: 'ac-marker',
+          html: this._planeSvg(st.track, color),
+          iconSize: [18, 18],
+          iconAnchor: [9, 9]
+        }));
+      }
+
+      const label = (ac.callsign || hex).trim();
       const tip = label +
         (altFt != null ? ' · ' + Math.round(altFt).toLocaleString() + ' ft' : '') +
         (ac.velocity != null ? ' · ' + Math.round(ac.velocity * 1.94384) + ' kt' : '');
-      m.bindTooltip(tip, { direction: 'top', offset: [0, -6], className: 'ax-tip', opacity: 0.95 });
-      m.on('click', () => UI.showTraffic(ac));
-      this.layers.traffic.addLayer(m);
+      st.marker.bindTooltip(tip, { direction: 'top', offset: [0, -8], className: 'ax-tip', opacity: 0.95 });
     });
+
+    // Remove aircraft no longer reported
+    Object.keys(this.aircraftState).forEach(hex => {
+      if (!seen.has(hex)) {
+        const st = this.aircraftState[hex];
+        try { this.layers.traffic.removeLayer(st.marker); } catch (e) {}
+        delete this.aircraftState[hex];
+      }
+    });
+
     UI.updateCounts({
       airports: Object.keys(this.airportIndex).length,
       traffic: list.length,
@@ -319,6 +356,58 @@ const MapApp = {
     if (document.getElementById('lyr-traffic')?.checked) {
       this.map.addLayer(this.layers.traffic);
     }
+    this.startTrafficAnim();
+  },
+
+  _planeSvg(track, color) {
+    const rot = track != null ? track : 0;
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">' +
+      '<g transform="rotate(' + rot + ' 12 12)">' +
+      '<path d="M12 2 L16 10.5 L22 12 L16 13.5 L12 22 L8 13.5 L2 12 L8 10.5 Z" fill="' + color + '" stroke="#0a0e14" stroke-width="1.2"/>' +
+      '</g></svg>';
+  },
+
+  startTrafficAnim() {
+    if (this._trafficAnim) return;
+    const hz = (CONFIG.trafficAnimHz || 20);
+    const dt = 1000 / hz;
+    // lerp factor per frame — reach ~95% of target within one poll interval
+    const poll = CONFIG.trafficRefreshInterval || 8000;
+    const frames = Math.max(8, poll / dt);
+    const alpha = 1 - Math.pow(0.05, 1 / frames);
+
+    const tick = () => {
+      if (!document.getElementById('lyr-traffic')?.checked) {
+        this._trafficAnim = null;
+        return;
+      }
+      const states = this.aircraftState;
+      for (const hex in states) {
+        const st = states[hex];
+        // position lerp
+        st.lat += (st.targetLat - st.lat) * alpha;
+        st.lon += (st.targetLon - st.lon) * alpha;
+        // heading shortest-path lerp
+        let d = ((st.targetTrack - st.track + 540) % 360) - 180;
+        st.track = (st.track + d * alpha + 360) % 360;
+        try {
+          st.marker.setLatLng([st.lat, st.lon]);
+          // refresh rotation periodically (not every frame for perf)
+          if (!st._rotFrame) st._rotFrame = 0;
+          st._rotFrame++;
+          if (st._rotFrame % 4 === 0) {
+            st.marker.setIcon(L.divIcon({
+              className: 'ac-marker',
+              html: this._planeSvg(st.track, st.color),
+              iconSize: [18, 18],
+              iconAnchor: [9, 9]
+            }));
+          }
+        } catch (e) {}
+      }
+      this._trafficAnim = setTimeout(tick, dt);
+    };
+    this._trafficAnim = setTimeout(tick, dt);
   },
 
   renderTFRs() {

@@ -6,12 +6,11 @@
   setInterval(() => UI.updateClock(), 1000);
 
   UI.init();
-  MapApp.init(); // map paints immediately with tiles
+  MapApp.init();
 
   UI.setLive(false);
   document.getElementById('last-update').textContent = 'LOADING…';
 
-  // Phase 1: airports only (critical path)
   try {
     await DataStore.loadAirports();
     MapApp.renderAirports();
@@ -22,16 +21,33 @@
     document.getElementById('last-update').textContent = 'AIRPORT LOAD ERROR';
   }
 
-  // Phase 2: runways in background (not blocking map)
-  DataStore.loadRunways().catch(e => console.warn('Runways deferred load failed', e));
-  DataStore.loadFrequencies().catch(e => console.warn('Frequencies deferred load failed', e));
+  DataStore.loadRunways().catch(() => {});
+  DataStore.loadFrequencies().catch(() => {});
 
-  // Live feeds
-  async function refreshLive() {
+  async function refreshTraffic() {
+    if (!document.getElementById('lyr-traffic')?.checked) return;
+    // Prefer viewport center for denser local traffic
+    try {
+      if (typeof MapApp !== 'undefined' && MapApp.map) {
+        const c = MapApp.map.getCenter();
+        const z = MapApp.map.getZoom();
+        // radius scales with zoom: closer = smaller radius, more detail
+        let nm = 80;
+        if (z <= 4) nm = 250;
+        else if (z <= 6) nm = 150;
+        else if (z <= 8) nm = 80;
+        else if (z <= 10) nm = 40;
+        else nm = 25;
+        DataStore._viewportQuery = { lat: c.lat, lon: c.lng, nm };
+      }
+    } catch (e) {}
+    await DataStore.fetchTraffic();
+    MapApp.renderTraffic();
+    UI.setLastUpdate(DataStore.lastUpdate || new Date());
+  }
+
+  async function refreshSlow() {
     const jobs = [];
-    if (document.getElementById('lyr-traffic')?.checked) {
-      jobs.push(DataStore.fetchTraffic().then(() => MapApp.renderTraffic()));
-    }
     if (document.getElementById('lyr-tfrs')?.checked) {
       jobs.push(
         DataStore.fetchWxBrief()
@@ -45,24 +61,32 @@
     if (document.getElementById('lyr-sigmet')?.checked) {
       jobs.push(DataStore.fetchSigmets().then(() => MapApp.renderSigmets()));
     }
-    if (jobs.length) {
-      await Promise.allSettled(jobs);
-      UI.setLastUpdate(DataStore.lastUpdate || new Date());
-    }
+    if (jobs.length) await Promise.allSettled(jobs);
   }
 
-  // First live pull after map is interactive
-  setTimeout(refreshLive, 2000);
-  setInterval(refreshLive, CONFIG.refreshInterval);
+  // Fast ADS-B loop
+  setTimeout(refreshTraffic, 800);
+  setInterval(refreshTraffic, CONFIG.trafficRefreshInterval || 8000);
+
+  // Slow layers
+  setTimeout(refreshSlow, 2500);
+  setInterval(refreshSlow, CONFIG.refreshInterval || 120000);
 
   document.getElementById('btn-refresh')?.addEventListener('click', () => {
-    refreshLive();
+    refreshTraffic();
+    refreshSlow();
     MapApp.renderAirports();
   });
 
-  if (!CONFIG.corsWorker) {
-    console.warn('[AviationXplr] Deploy worker/cors-proxy.js and set CONFIG.corsWorker for live ADS-B/METAR. See worker/README.md');
-  }
+  // Refresh traffic when map moves (debounced)
+  let moveTimer;
+  MapApp.map.on('moveend', () => {
+    clearTimeout(moveTimer);
+    moveTimer = setTimeout(refreshTraffic, 600);
+  });
 
+  if (!CONFIG.corsWorker) {
+    console.info('[AviationXplr] ADS-B via planes.fyi (direct). Optional worker for METAR/TFR: see worker/README.md');
+  }
   console.log('%c AviationXplr ready ', 'background:#00d4ff;color:#001018;font-weight:bold;padding:4px 8px');
 })();

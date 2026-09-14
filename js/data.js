@@ -90,8 +90,14 @@ const DataStore = {
   async fetchTraffic() {
     this.loading.traffic = true;
     const byHex = new Map();
-    const grid = CONFIG.trafficGrid || [{ lat: 40, lon: -75 }];
-    const nm = Math.min(CONFIG.trafficRadiusNm || 100, 150); // planes.fyi radius in nm-ish
+    let grid = CONFIG.trafficGrid || [{ lat: 40, lon: -75 }];
+    let nm = Math.min(CONFIG.trafficRadiusNm || 100, 150);
+    // Viewport-centered query for dense, moving traffic under the camera
+    if (this._viewportQuery) {
+      const v = this._viewportQuery;
+      grid = [{ lat: v.lat, lon: v.lon }, ...grid.slice(0, 6)];
+      nm = v.nm || nm;
+    }
 
     const ingest = (list) => {
       (list || []).forEach(a => {
