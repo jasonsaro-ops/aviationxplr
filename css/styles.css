@@ -563,3 +563,16 @@ html, body {
   color: #c8d4e0 !important;
   font-size: 12px;
 }
+
+/* OSM darkened for night ops look */
+.osm-dark-tiles {
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
+}
+.ac-marker {
+  background: transparent !important;
+  border: none !important;
+}
+.ac-marker svg {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7));
+}

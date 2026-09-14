@@ -24,7 +24,7 @@ const MapApp = {
       preferCanvas: false
     });
 
-    // Basemaps (switchable) — all free, no API key
+    // Basemaps — Esri only (no API key; Carto now watermarks without key)
     const esriDark = L.tileLayer(CONFIG.tiles.dark.url, {
       attribution: CONFIG.tiles.dark.attribution,
       maxZoom: 18,
@@ -34,25 +34,24 @@ const MapApp = {
       attribution: '',
       maxZoom: 18,
       maxNativeZoom: 16,
-      opacity: 0.9
-    });
-    const cartoDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OSM &copy; CARTO',
-      subdomains: 'abcd',
-      maxZoom: 20,
-      maxNativeZoom: 20
+      opacity: 0.85
     });
     const esriImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       attribution: 'Tiles &copy; Esri',
       maxZoom: 19,
       maxNativeZoom: 19
     });
-    // Default: Carto dark (sharp at high zoom) — falls back if tiles blocked
-    cartoDark.addTo(this.map);
+    const osmDark = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap',
+      maxZoom: 19,
+      className: 'osm-dark-tiles'
+    });
+    const esriGroup = L.layerGroup([esriDark, esriLabels]);
+    esriGroup.addTo(this.map);
     this._basemaps = {
-      'Dark (Carto)': cartoDark,
-      'Dark Gray (Esri)': L.layerGroup([esriDark, esriLabels]),
-      'Satellite (Esri)': esriImagery
+      'Dark Gray (Esri)': esriGroup,
+      'Satellite (Esri)': esriImagery,
+      'Street (OSM)': osmDark
     };
     L.control.layers(this._basemaps, null, { position: 'topright', collapsed: true }).addTo(this.map);
 
@@ -260,33 +259,55 @@ const MapApp = {
   },
 
 
+
   renderTraffic() {
     this.layers.traffic.clearLayers();
     const list = DataStore.traffic || [];
-    list.forEach(ac => {
+    // Cap markers for performance when zoomed out
+    const zoom = this.map.getZoom();
+    let draw = list;
+    if (zoom < 5 && list.length > 400) {
+      // sample evenly
+      const step = Math.ceil(list.length / 400);
+      draw = list.filter((_, i) => i % step === 0);
+    } else if (zoom < 7 && list.length > 900) {
+      const step = Math.ceil(list.length / 900);
+      draw = list.filter((_, i) => i % step === 0);
+    }
+
+    draw.forEach(ac => {
       if (ac.lat == null || ac.lon == null) return;
       const rot = ac.track != null ? ac.track : 0;
       const altFt = ac.alt != null ? ac.alt * 3.28084 : null;
-      // altitude color bands
-      let color = '#8a9bb0';
+      let color = '#9aa8b8';
       if (altFt == null || ac.onGround) color = '#6a7a8a';
-      else if (altFt < 10000) color = '#20e070';
+      else if (altFt < 10000) color = '#3dde7a';
       else if (altFt < 25000) color = '#00d4ff';
       else if (altFt < 35000) color = '#f0c040';
-      else color = '#ff6080';
+      else color = '#ff6b8a';
 
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">' +
+        '<g transform="rotate(' + rot + ' 12 12)">' +
+        '<path d="M12 2 L15 11 L22 12 L15 13 L12 22 L9 13 L2 12 L9 11 Z" fill="' + color + '" stroke="#0a0e14" stroke-width="1"/>' +
+        '</g></svg>';
       const icon = L.divIcon({
         className: 'ac-marker',
-        html: '<div class="traffic-icon" style="border-bottom-color:' + color + ';transform:rotate(' + rot + 'deg)"></div>',
-        iconSize: [12, 14],
-        iconAnchor: [6, 7]
+        html: svg,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
       });
       const label = (ac.callsign || ac.icao24 || '').trim();
-      const m = L.marker([ac.lat, ac.lon], { icon, title: label, riseOnHover: true, keyboard: false });
-      m.bindTooltip(
-        label + (altFt != null ? ' · ' + Math.round(altFt) + ' ft' : ''),
-        { direction: 'top', offset: [0, -8], className: 'ax-tip', opacity: 0.95 }
-      );
+      const m = L.marker([ac.lat, ac.lon], {
+        icon,
+        title: label,
+        riseOnHover: true,
+        keyboard: false,
+        opacity: 0.95
+      });
+      const tip = label +
+        (altFt != null ? ' · ' + Math.round(altFt).toLocaleString() + ' ft' : '') +
+        (ac.velocity != null ? ' · ' + Math.round(ac.velocity * 1.94384) + ' kt' : '');
+      m.bindTooltip(tip, { direction: 'top', offset: [0, -6], className: 'ax-tip', opacity: 0.95 });
       m.on('click', () => UI.showTraffic(ac));
       this.layers.traffic.addLayer(m);
     });

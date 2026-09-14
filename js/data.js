@@ -130,25 +130,25 @@ const DataStore = {
         const json = await res.json();
         ingest(json.ac || json.aircraft || []);
       } catch (e) {
-        console.warn('[Data] planes.fyi point failed', pt.lat, pt.lon, e.message);
+        /* planes.fyi point miss */
       }
     });
     await Promise.allSettled(pfJobs);
 
-    // Fallback: adsb.fi / adsb.lol via proxy if still empty
-    if (byHex.size < 5) {
-      const points = grid.slice(0, 4);
-      for (const pt of points) {
+    // Fallback only if planes.fyi returned nothing
+    if (byHex.size === 0) {
+      console.warn('[Data] planes.fyi empty — trying fallback ADS-B');
+      for (const pt of grid.slice(0, 3)) {
         for (const tmpl of [CONFIG.adsbfiPoint, CONFIG.adsblolPoint]) {
           if (!tmpl) continue;
-          const url = tmpl.replace('{lat}', pt.lat).replace('{lon}', pt.lon).replace('{nm}', 200);
           try {
+            const url = tmpl.replace('{lat}', pt.lat).replace('{lon}', pt.lon).replace('{nm}', 200);
             const res = await this.proxiedFetch(url);
             const json = await res.json();
             ingest(json.aircraft || json.ac || []);
-            if (byHex.size > 20) break;
-          } catch (e) { /* continue */ }
+          } catch (e) { /* quiet */ }
         }
+        if (byHex.size > 0) break;
       }
     }
 
