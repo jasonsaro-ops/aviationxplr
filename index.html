@@ -41,6 +41,8 @@
         <label class="layer-toggle"><input type="checkbox" id="lyr-tfrs" checked /> TFRs</label>
         <label class="layer-toggle"><input type="checkbox" id="lyr-metar" /> METAR Stations</label>
         <label class="layer-toggle"><input type="checkbox" id="lyr-airspace" /> Airspace (Class B/C/D)</label>
+        <label class="layer-toggle"><input type="checkbox" id="lyr-artcc" /> ARTCC Centers</label>
+        <label class="layer-toggle"><input type="checkbox" id="lyr-tracon" /> TRACON Areas</label>
       </div>
       <div class="sidebar-section">
         <h3>FILTER AIRPORTS</h3>
@@ -55,7 +57,7 @@
         <h3>DATA SOURCES</h3>
         <ul class="sources">
           <li>OurAirports (airports/runways)</li>
-          <li>FAA TFR List</li>
+          <li>1800WXBRIEF / Leidos (TFR polygons, METAR)</li>\n          <li>FAA TFR List (fallback)</li>
           <li>AviationWeather.gov (METAR)</li>
           <li>OpenSky Network (ADS-B)</li>
         </ul>
@@ -96,6 +98,8 @@
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="js/config.js"></script>
   <script src="js/data.js"></script>
+  <script src="js/airspace.js"></script>
+  <script src="js/runway-panel.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/map.js"></script>
   <script src="js/app.js"></script>

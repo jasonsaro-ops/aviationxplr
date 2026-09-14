@@ -98,22 +98,8 @@ const UI = {
       html += `</div>`;
     }
 
-    if (runways.length) {
-      html += `<div class="section-title">RUNWAYS (${runways.length})</div>`;
-      runways.forEach(r => {
-        const id = [r.le_ident, r.he_ident].filter(Boolean).join('/') || '—';
-        const dims = [r.length_ft ? r.length_ft + ' × ' + (r.width_ft || '?') + ' ft' : '', r.surface || ''].filter(Boolean).join(' · ');
-        const light = r.lighted ? 'LIGHTS' : '';
-        const closed = r.closed ? 'CLOSED' : '';
-        html += `<div class="rwy-card" data-rwy="${id}">
-          <div class="rwy-id">${id} ${closed ? '<span style="color:var(--danger)">' + closed + '</span>' : ''}</div>
-          <div class="rwy-dims">${dims} ${light}</div>
-          <div class="rwy-dims">HDG ${r.le_heading != null ? Math.round(r.le_heading) + '° / ' + (r.he_heading != null ? Math.round(r.he_heading) + '°' : '—') : '—'}</div>
-        </div>`;
-      });
-    } else {
-      html += `<div class="section-title">RUNWAYS</div><p style="color:var(--text-dim)">No runway data loaded for this ident.</p>`;
-    }
+    // Runway & wind panel (pilotgpt-style) — initially without METAR
+    html += `<div id="rwy-panel-slot">${RunwayPanel.render(runways, null, p.elev_ft)}</div>`;
 
     html += `<div class="section-title">LIVE WEATHER</div>
       <button class="btn secondary" id="btn-metar" style="width:100%;margin-bottom:8px">FETCH METAR</button>
@@ -122,20 +108,25 @@ const UI = {
     document.getElementById('panel-body').innerHTML = html;
     document.getElementById('info-panel').classList.remove('hidden');
 
-    // METAR button
+    // Auto-fetch METAR and upgrade runway panel with wind
     const icao = p.icao || p.ident;
-    document.getElementById('btn-metar')?.addEventListener('click', async () => {
+    const upgradeWithMetar = async () => {
       const box = document.getElementById('metar-result');
-      box.innerHTML = '<span style="color:var(--text-dim)">Loading…</span>';
+      if (box) box.innerHTML = '<span style="color:var(--text-dim)">Loading METAR…</span>';
       const data = await DataStore.fetchMetar([icao]);
       if (data && data.length) {
         const m = data[0];
         const raw = m.rawOb || m.raw_text || JSON.stringify(m, null, 2);
-        box.innerHTML = `<div class="metar-box">${raw}</div>`;
+        if (box) box.innerHTML = `<div class="metar-box">${raw}</div>`;
+        const slot = document.getElementById('rwy-panel-slot');
+        if (slot) slot.innerHTML = RunwayPanel.render(runways, m, p.elev_ft);
       } else {
-        box.innerHTML = '<span style="color:var(--warn)">No METAR available or CORS blocked.</span>';
+        if (box) box.innerHTML = '<span style="color:var(--warn)">No METAR available or proxy blocked.</span>';
       }
-    });
+    };
+    document.getElementById('btn-metar')?.addEventListener('click', upgradeWithMetar);
+    // auto-load once
+    upgradeWithMetar();
   },
 
   showTraffic(ac) {
@@ -161,18 +152,16 @@ const UI = {
 
   showTFR(tfr) {
     document.getElementById('panel-title').textContent = tfr.notam || tfr.NOTAM || 'TFR';
-    const keys = Object.keys(tfr);
-    let html = '<div class="meta-grid">';
-    keys.forEach(k => {
-      const v = tfr[k];
-      if (v == null || typeof v === 'object') return;
-      html += `<span class="label">${k}</span><span class="value">${String(v)}</span>`;
-    });
-    html += '</div>';
-    if (tfr.links?.details || tfr.detail_url) {
-      const url = tfr.links?.details || tfr.detail_url;
-      html += `<p style="margin-top:10px"><a href="${url}" target="_blank" rel="noopener" style="color:var(--accent)">View official detail →</a></p>`;
-    }
+    const from = tfr.from ? new Date(tfr.from * 1000).toISOString() : '—';
+    const to = tfr.to ? new Date(tfr.to * 1000).toISOString() : '—';
+    let html = `<div class="meta-grid">
+      <span class="label">NOTAM</span><span class="value">${tfr.notam || tfr.NOTAM || '—'}</span>
+      <span class="label">Type</span><span class="value">${tfr.type || '—'}</span>
+      <span class="label">From</span><span class="value">${from}</span>
+      <span class="label">To</span><span class="value">${to}</span>
+    </div>`;
+    if (tfr.description) html += `<p style="margin:8px 0;color:var(--text-dim)">${String(tfr.description).replace(/<br\/?>/gi,' · ')}</p>`;
+    if (tfr.msg) html += `<div class="metar-box" style="max-height:280px;overflow:auto">${String(tfr.msg).replace(/</g,'&lt;')}</div>`;
     document.getElementById('panel-body').innerHTML = html;
     document.getElementById('info-panel').classList.remove('hidden');
   },

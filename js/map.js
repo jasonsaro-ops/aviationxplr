@@ -49,6 +49,8 @@ const MapApp = {
     this.layers.traffic = L.layerGroup();
     this.layers.tfrs = L.layerGroup();
     this.layers.metar = L.layerGroup();
+    this.layers.artcc = L.layerGroup();
+    this.layers.tracon = L.layerGroup();
 
     this.map.addLayer(this.layers.airports);
     this.map.addLayer(this.layers.runways);
@@ -59,6 +61,9 @@ const MapApp = {
     if (document.getElementById('lyr-tfrs')?.checked) {
       this.map.addLayer(this.layers.tfrs);
     }
+
+    this.buildArtccLayer();
+    this.buildTraconLayer();
 
     // Wire layer toggles
     document.getElementById('lyr-airports').addEventListener('change', (e) => {
@@ -80,6 +85,16 @@ const MapApp = {
     document.getElementById('lyr-tfrs').addEventListener('change', (e) => {
       if (e.target.checked) this.map.addLayer(this.layers.tfrs);
       else this.map.removeLayer(this.layers.tfrs);
+    });
+
+    
+    document.getElementById('lyr-artcc')?.addEventListener('change', (e) => {
+      if (e.target.checked) this.map.addLayer(this.layers.artcc);
+      else this.map.removeLayer(this.layers.artcc);
+    });
+    document.getElementById('lyr-tracon')?.addEventListener('change', (e) => {
+      if (e.target.checked) this.map.addLayer(this.layers.tracon);
+      else this.map.removeLayer(this.layers.tracon);
     });
 
     // Filters
@@ -193,33 +208,62 @@ const MapApp = {
 
   renderTFRs() {
     this.layers.tfrs.clearLayers();
-    // TFR list is usually text-only without geometry in the simple export.
-    // We place a marker at a default or skip geometry; users click list-style if we add a list later.
-    // For now, if any TFR has lat/lon fields we plot them.
-    DataStore.tfrs.forEach((t, idx) => {
-      // Try common fields
-      let lat = t.lat || t.latitude || t.center_lat;
-      let lon = t.lon || t.longitude || t.center_lon;
-      if (lat == null || lon == null) return;
-      const m = L.circleMarker([lat, lon], {
-        radius: 8,
-        color: '#ff4060',
-        fillColor: '#ff4060',
-        fillOpacity: 0.35,
-        weight: 2
-      });
-      m.bindTooltip(t.notam || t.NOTAM || 'TFR');
-      m.on('click', () => UI.showTFR(t));
-      this.layers.tfrs.addLayer(m);
+    const source = (DataStore.wxbriefTfrs && DataStore.wxbriefTfrs.length)
+      ? DataStore.wxbriefTfrs
+      : DataStore.tfrs;
+    source.forEach((t) => {
+      const geom = t.g || t.geometry;
+      const notamId = t.notamid || t.notam || t.NOTAM || 'TFR';
+      const color = (t.type === 'tfrp') ? '#ff4060' : (t.type === 'tfrf') ? '#4080ff' : '#20c0c0';
+      if (geom && geom.coordinates) {
+        try {
+          const layer = L.geoJSON(geom, {
+            style: { color, fillColor: color, fillOpacity: 0.2, weight: 2 }
+          });
+          layer.bindTooltip(t.notamHoverText ? t.notamHoverText.replace(/<br\/>/g, ' · ') : notamId);
+          layer.on('click', () => UI.showTFR({
+            notam: notamId,
+            description: t.notamHoverText || '',
+            msg: t.msg,
+            from: t.from,
+            to: t.to,
+            type: t.type
+          }));
+          this.layers.tfrs.addLayer(layer);
+        } catch (e) { console.warn('TFR geom', e); }
+      }
     });
-    // Always show the layer if toggle is on (even if empty)
-    if (document.getElementById('lyr-tfrs').checked) {
+    // METAR category dots from 1800wxbrief
+    if (DataStore.wxbriefMetars) {
+      DataStore.wxbriefMetars.forEach(m => {
+        if (m.lat == null || m.lon == null) return;
+        // cat: 4=VFR green, others vary
+        const catColors = { 4: '#20e070', 3: '#00d4ff', 2: '#ff4060', 1: '#c040ff', 0: '#888' };
+        const col = catColors[m.cat] || '#20e070';
+        const mk = L.circleMarker([m.lat, m.lon], {
+          radius: 5, color: col, fillColor: col, fillOpacity: 0.85, weight: 1
+        });
+        mk.bindTooltip(`${m.icao || ''} · cat ${m.cat}`);
+        mk.on('click', () => {
+          document.getElementById('panel-title').textContent = `${m.icao || 'METAR'} · ${m.stn || ''}`;
+          document.getElementById('panel-body').innerHTML = `<div class="metar-box">${m.msg || ''}</div>
+            <div class="meta-grid" style="margin-top:10px">
+              <span class="label">Category</span><span class="value">${m.cat}</span>
+              <span class="label">Obs time</span><span class="value">${m.obTime ? new Date(m.obTime*1000).toISOString() : '—'}</span>
+            </div>
+            <p style="color:var(--text-dim);font-size:11px;margin-top:8px">Source: 1800WXBRIEF / Leidos Flight Service</p>`;
+          document.getElementById('info-panel').classList.remove('hidden');
+        });
+        this.layers.tfrs.addLayer(mk); // reuse tfrs layer group when TFR toggle on; also add to metar if separate
+      });
+    }
+    if (document.getElementById('lyr-tfrs')?.checked) {
       this.map.addLayer(this.layers.tfrs);
     }
     UI.updateCounts({
       airports: Object.keys(this.airportIndex).length,
       traffic: DataStore.traffic.length,
-      tfrs: DataStore.tfrs.length
+      tfrs: source.length
     });
   },
 
@@ -228,5 +272,61 @@ const MapApp = {
     this.map.setView([lat, lon], 13, { animate: true });
     UI.showAirport(feature);
     this.highlightRunways(feature.properties.ident);
+  },
+
+  buildArtccLayer() {
+    if (typeof AirspaceData === 'undefined') return;
+    AirspaceData.artcc.forEach(c => {
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="background:#7c5cff;color:#fff;font-size:10px;font-weight:700;padding:2px 5px;border-radius:3px;white-space:nowrap;border:1px solid #a080ff;font-family:monospace">${c.id}</div>`,
+        iconSize: [40, 18],
+        iconAnchor: [20, 9]
+      });
+      const m = L.marker([c.lat, c.lon], { icon });
+      m.bindTooltip(`${c.id} · ${c.name} ARTCC`, { permanent: false });
+      m.on('click', () => {
+        UI.hidePanel();
+        document.getElementById('panel-title').textContent = `${c.id} · ${c.name} ARTCC`;
+        document.getElementById('panel-body').innerHTML = `<div class="meta-grid">
+          <span class="label">Facility</span><span class="value">${c.id}</span>
+          <span class="label">Name</span><span class="value">${c.name} Center</span>
+          <span class="label">Type</span><span class="value">ARTCC (Air Route Traffic Control Center)</span>
+          <span class="label">Location</span><span class="value">${c.lat.toFixed(3)}, ${c.lon.toFixed(3)}</span>
+        </div>
+        <p style="color:var(--text-dim);font-size:11px;margin-top:10px">Facility location marker. Official lateral boundaries are published by FAA (NASR / Enroute charts) and vary by stratum (LOW/HIGH).</p>`;
+        document.getElementById('info-panel').classList.remove('hidden');
+      });
+      this.layers.artcc.addLayer(m);
+    });
+  },
+
+  buildTraconLayer() {
+    if (typeof AirspaceData === 'undefined') return;
+    const nmToM = 1852;
+    AirspaceData.tracon.forEach(t => {
+      const circle = L.circle([t.lat, t.lon], {
+        radius: t.radiusNm * nmToM,
+        color: '#00c8a0',
+        fillColor: '#00c8a0',
+        fillOpacity: 0.08,
+        weight: 1.5,
+        dashArray: '4 4'
+      });
+      circle.bindTooltip(`${t.id} · ${t.name}`, { sticky: true });
+      circle.on('click', () => {
+        document.getElementById('panel-title').textContent = `${t.id} · ${t.name}`;
+        document.getElementById('panel-body').innerHTML = `<div class="meta-grid">
+          <span class="label">ID</span><span class="value">${t.id}</span>
+          <span class="label">Name</span><span class="value">${t.name}</span>
+          <span class="label">Type</span><span class="value">TRACON / Approach</span>
+          <span class="label">Approx. radius</span><span class="value">${t.radiusNm} nm (visualization only)</span>
+          <span class="label">Center</span><span class="value">${t.lat.toFixed(3)}, ${t.lon.toFixed(3)}</span>
+        </div>
+        <p style="color:var(--text-dim);font-size:11px;margin-top:10px">Approximate coverage circle for situational awareness. Official TRACON boundaries are complex polygons published in FAA directives and not freely available as simple public GeoJSON for all facilities.</p>`;
+        document.getElementById('info-panel').classList.remove('hidden');
+      });
+      this.layers.tracon.addLayer(circle);
+    });
   }
 };

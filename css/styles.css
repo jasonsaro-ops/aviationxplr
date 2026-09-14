@@ -417,3 +417,33 @@ html, body {
   .search-wrap { width: 180px; }
   .floating-panel { width: calc(100vw - 24px); right: 12px; left: 12px; }
 }
+
+/* Runway & Wind panel (pilotgpt-style) */
+.rwy-wind-panel { margin-top: 4px; }
+.rwy-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 10px 0; }
+.rwy-chip {
+  background: #1a2430; border: 1px solid var(--border); color: var(--text);
+  padding: 5px 12px; border-radius: 20px; font-family: var(--mono); font-size: 12px;
+  cursor: pointer; transition: all 0.15s;
+}
+.rwy-chip:hover { border-color: var(--accent); }
+.rwy-chip.active { background: #f0a020; color: #1a1000; border-color: #f0a020; font-weight: 700; }
+.wind-pill {
+  text-align: center; background: #1a2430; border-radius: 20px; padding: 6px 14px;
+  font-family: var(--mono); font-size: 13px; margin: 8px auto; width: fit-content;
+}
+.wind-pill.muted { color: var(--text-dim); }
+.comp-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 12px 0;
+  text-align: center;
+}
+.comp-label { font-size: 10px; color: var(--text-dim); letter-spacing: 0.08em; display: block; }
+.comp-val { font-family: var(--mono); font-size: 15px; font-weight: 600; margin-top: 2px; }
+.comp-val.head { color: var(--success); }
+.comp-val.tail { color: var(--danger); }
+.pattern-box {
+  background: #121a24; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px; margin-top: 8px;
+}
+.pattern-title { font-size: 12px; font-weight: 600; color: var(--text); }
+.pattern-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }

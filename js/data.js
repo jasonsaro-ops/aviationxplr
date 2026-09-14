@@ -4,6 +4,8 @@ const DataStore = {
   runwaysByIdent: {},      // { ident: [rwy, ...] }
   traffic: [],             // current aircraft states
   tfrs: [],                // TFR list
+  wxbriefMetars: [],       // from 1800wxbrief metaf
+  wxbriefTfrs: [],         // from 1800wxbrief with geometry
   lastUpdate: null,
   loading: { airports: false, traffic: false, tfrs: false },
 
@@ -118,6 +120,46 @@ const DataStore = {
     } catch (e) {
       console.warn('[Data] METAR fetch failed:', e.message);
       return [];
+    }
+  },
+
+
+  async fetchWxBrief() {
+    const b = CONFIG.wxbriefBbox;
+    const ext = `${b.west},${b.south},${b.east},${b.north}`;
+    const time = Math.floor(Date.now() / 1000);
+    const url = `${CONFIG.wxbriefDataLayer}?ext=${ext}&size=1400,900&center=${(b.west+b.east)/2},${(b.south+b.north)/2}&zoom=5&res=5000&ver=1&layers=${CONFIG.wxbriefLayers}&time=${time}&baseTypes=all&app=pw&rand=${Math.floor(Math.random()*99999)}`;
+    try {
+      // Prefer direct (same-origin policy may allow; else proxy)
+      let res;
+      try {
+        res = await fetch(url, { headers: { 'Accept': 'application/json' }, referrer: 'https://www.1800wxbrief.com/Website/interactiveMap' });
+        if (!res.ok) throw new Error('direct ' + res.status);
+      } catch (e1) {
+        res = await this.proxiedFetch(url);
+      }
+      const json = await res.json();
+      const layers = json.l || [];
+      this.wxbriefMetars = layers.filter(x => x.type === 'metaf');
+      this.wxbriefTfrs = layers.filter(x => String(x.type || '').startsWith('tfr'));
+      // Also merge TFR list for counts
+      this.tfrs = this.wxbriefTfrs.map(t => ({
+        notam: t.notamid,
+        NOTAM: t.notamid,
+        description: t.notamHoverText || '',
+        msg: t.msg,
+        from: t.from,
+        to: t.to,
+        type: t.type,
+        geometry: t.g
+      }));
+      console.log(`[Data] 1800WXBRIEF: ${this.wxbriefMetars.length} METARs, ${this.wxbriefTfrs.length} TFRs`);
+    } catch (e) {
+      console.warn('[Data] 1800WXBRIEF dataLayer failed:', e.message);
+      this.wxbriefMetars = [];
+      this.wxbriefTfrs = [];
+    } finally {
+      this.lastUpdate = new Date();
     }
   },
 

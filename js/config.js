@@ -30,6 +30,12 @@ const CONFIG = {
   corsProxy: 'https://corsproxy.io/?',
   corsProxyFallback: 'https://api.allorigins.win/raw?url=',
 
+  // Leidos 1800WXBRIEF Interactive Map public dataLayer
+  // METAR category points + TFR polygons with full NOTAM text
+  wxbriefDataLayer: 'https://www.1800wxbrief.com/Website/Graphics/api/dataLayer',
+  wxbriefLayers: 'metaf,tfr',
+  wxbriefBbox: { west: -125, south: 24, east: -66, north: 50 },
+
   // Tile layers — NO API KEY REQUIRED
   // Primary dark: Esri World Dark Gray Canvas (free, no key)
   // Labels overlay + OSM / satellite fallbacks

@@ -29,7 +29,13 @@
 
     const jobs = [];
     if (trafficOn) jobs.push(DataStore.fetchTraffic().then(() => MapApp.renderTraffic()));
-    if (tfrOn) jobs.push(DataStore.fetchTFRs().then(() => MapApp.renderTFRs()));
+    if (tfrOn) {
+      jobs.push(
+        DataStore.fetchWxBrief()
+          .then(() => MapApp.renderTFRs())
+          .catch(() => DataStore.fetchTFRs().then(() => MapApp.renderTFRs()))
+      );
+    }
 
     if (jobs.length) {
       await Promise.allSettled(jobs);
