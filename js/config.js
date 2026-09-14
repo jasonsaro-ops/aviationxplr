@@ -15,6 +15,16 @@ const CONFIG = {
 
   // Public APIs (client-side)
   openskyStates: 'https://opensky-network.org/api/states/all',
+  // adsb.lol — primary live traffic (community ADS-B, no key)
+  adsblolPoint: 'https://api.adsb.lol/v2/lat/{lat}/lon/{lon}/dist/{nm}',
+  // Grid centers to cover CONUS (~250nm each)
+  trafficGrid: [
+    { lat: 47.5, lon: -122.0 }, { lat: 45.5, lon: -100.0 }, { lat: 42.5, lon: -71.5 },
+    { lat: 40.0, lon: -111.0 }, { lat: 39.5, lon: -98.0 }, { lat: 40.5, lon: -80.0 },
+    { lat: 34.0, lon: -118.0 }, { lat: 33.0, lon: -97.0 }, { lat: 33.5, lon: -84.0 },
+    { lat: 29.0, lon: -95.0 }, { lat: 28.0, lon: -81.5 }, { lat: 36.0, lon: -115.0 }
+  ],
+  trafficRadiusNm: 280,
   // Bounding box for CONUS roughly to reduce payload
   openskyBbox: { lamin: 24.0, lomin: -125.0, lamax: 50.0, lomax: -66.0 },
 

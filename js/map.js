@@ -10,7 +10,7 @@ const MapApp = {
   },
   airportIndex: {},      // ident -> marker
   filters: {
-    large: true, medium: true, small: true, heli: false, seaplane: false, scheduled: false
+    large: true, medium: true, small: false, heli: false, seaplane: false, scheduled: false
   },
 
   init() {
@@ -20,7 +20,8 @@ const MapApp = {
       minZoom: CONFIG.minZoom,
       maxZoom: CONFIG.maxZoom,
       zoomControl: true,
-      attributionControl: true
+      attributionControl: true,
+      preferCanvas: true
     });
 
     // Base tiles — Esri Dark Gray (no API key) + optional labels
@@ -39,18 +40,15 @@ const MapApp = {
     }
 
     // Layer groups
-    this.layers.airports = L.markerClusterGroup({
-      maxClusterRadius: 50,
-      spiderfyOnMaxZoom: true,
-      showCoverageOnHover: false,
-      disableClusteringAtZoom: 12
-    });
+    // No clustering — sleek individual markers (canvas for performance)
+    this.layers.airports = L.layerGroup();
     this.layers.runways = L.layerGroup();
     this.layers.traffic = L.layerGroup();
     this.layers.tfrs = L.layerGroup();
     this.layers.metar = L.layerGroup();
     this.layers.artcc = L.layerGroup();
     this.layers.tracon = L.layerGroup();
+    this.layers.towers = L.layerGroup();
 
     this.map.addLayer(this.layers.airports);
     this.map.addLayer(this.layers.runways);
@@ -64,6 +62,7 @@ const MapApp = {
 
     this.buildArtccLayer();
     this.buildTraconLayer();
+    this.buildTowerLayer();
 
     // Wire layer toggles
     document.getElementById('lyr-airports').addEventListener('change', (e) => {
@@ -95,6 +94,10 @@ const MapApp = {
     document.getElementById('lyr-tracon')?.addEventListener('change', (e) => {
       if (e.target.checked) this.map.addLayer(this.layers.tracon);
       else this.map.removeLayer(this.layers.tracon);
+    });
+    document.getElementById('lyr-towers')?.addEventListener('change', (e) => {
+      if (e.target.checked) this.map.addLayer(this.layers.towers);
+      else this.map.removeLayer(this.layers.towers);
     });
 
     // Filters
@@ -141,14 +144,15 @@ const MapApp = {
 
       const [lon, lat] = f.geometry.coordinates;
       const color = CONFIG.airportColors[p.type] || '#8a9bb0';
-      const size = p.type === 'large_airport' ? 12 : (p.type === 'medium_airport' ? 10 : 8);
-      const icon = L.divIcon({
-        className: '',
-        html: `<div class="airport-marker ${p.type.replace('_airport','').replace('_base','')}" style="background:${color};width:${size}px;height:${size}px"></div>`,
-        iconSize: [size, size],
-        iconAnchor: [size/2, size/2]
+      const radius = p.type === 'large_airport' ? 4 : (p.type === 'medium_airport' ? 3 : 2);
+      const marker = L.circleMarker([lat, lon], {
+        radius,
+        color: '#0a0e14',
+        weight: 0.8,
+        fillColor: color,
+        fillOpacity: 0.9,
+        title: p.name
       });
-      const marker = L.marker([lat, lon], { icon, title: p.name });
       marker.feature = f;
       marker.on('click', () => {
         UI.showAirport(f);
@@ -190,12 +194,12 @@ const MapApp = {
     DataStore.traffic.forEach(ac => {
       const rot = ac.track != null ? ac.track : 0;
       const icon = L.divIcon({
-        className: '',
-        html: `<div class="traffic-icon" style="transform: rotate(${rot}deg)"></div>`,
-        iconSize: [10, 14],
-        iconAnchor: [5, 7]
+        className: 'ac-marker',
+        html: '<div class="traffic-icon" style="transform:rotate(' + rot + 'deg)"></div>',
+        iconSize: [10, 12],
+        iconAnchor: [5, 6]
       });
-      const m = L.marker([ac.lat, ac.lon], { icon, title: ac.callsign || ac.icao24 });
+      const m = L.marker([ac.lat, ac.lon], { icon, title: ac.callsign || ac.icao24, riseOnHover: true });
       m.on('click', () => UI.showTraffic(ac));
       this.layers.traffic.addLayer(m);
     });
@@ -276,25 +280,23 @@ const MapApp = {
 
   buildArtccLayer() {
     if (typeof AirspaceData === 'undefined') return;
+    this.layers.artcc.clearLayers();
     AirspaceData.artcc.forEach(c => {
-      const icon = L.divIcon({
-        className: '',
-        html: `<div style="background:#7c5cff;color:#fff;font-size:10px;font-weight:700;padding:2px 5px;border-radius:3px;white-space:nowrap;border:1px solid #a080ff;font-family:monospace">${c.id}</div>`,
-        iconSize: [40, 18],
-        iconAnchor: [20, 9]
+      const m = L.circleMarker([c.lat, c.lon], {
+        radius: 5,
+        color: '#9b7bff',
+        weight: 1.5,
+        fillColor: '#7c5cff',
+        fillOpacity: 0.85
       });
-      const m = L.marker([c.lat, c.lon], { icon });
-      m.bindTooltip(`${c.id} · ${c.name} ARTCC`, { permanent: false });
+      m.bindTooltip(c.id + ' · ' + c.name, { className: 'ax-tip' });
       m.on('click', () => {
-        UI.hidePanel();
-        document.getElementById('panel-title').textContent = `${c.id} · ${c.name} ARTCC`;
-        document.getElementById('panel-body').innerHTML = `<div class="meta-grid">
-          <span class="label">Facility</span><span class="value">${c.id}</span>
-          <span class="label">Name</span><span class="value">${c.name} Center</span>
-          <span class="label">Type</span><span class="value">ARTCC (Air Route Traffic Control Center)</span>
-          <span class="label">Location</span><span class="value">${c.lat.toFixed(3)}, ${c.lon.toFixed(3)}</span>
-        </div>
-        <p style="color:var(--text-dim);font-size:11px;margin-top:10px">Facility location marker. Official lateral boundaries are published by FAA (NASR / Enroute charts) and vary by stratum (LOW/HIGH).</p>`;
+        document.getElementById('panel-title').textContent = c.id + ' · ' + c.name + ' ARTCC';
+        document.getElementById('panel-body').innerHTML = '<div class="meta-grid">' +
+          '<span class="label">Facility</span><span class="value">' + c.id + '</span>' +
+          '<span class="label">Name</span><span class="value">' + c.name + ' Center</span>' +
+          '<span class="label">Type</span><span class="value">ARTCC</span></div>' +
+          '<p style="color:var(--text-dim);font-size:11px;margin-top:8px">Facility location. Lateral boundaries vary by altitude stratum (FAA).</p>';
         document.getElementById('info-panel').classList.remove('hidden');
       });
       this.layers.artcc.addLayer(m);
@@ -303,30 +305,62 @@ const MapApp = {
 
   buildTraconLayer() {
     if (typeof AirspaceData === 'undefined') return;
+    this.layers.tracon.clearLayers();
     const nmToM = 1852;
     AirspaceData.tracon.forEach(t => {
       const circle = L.circle([t.lat, t.lon], {
-        radius: t.radiusNm * nmToM,
+        radius: (t.radiusNm || 30) * nmToM,
         color: '#00c8a0',
         fillColor: '#00c8a0',
-        fillOpacity: 0.08,
-        weight: 1.5,
-        dashArray: '4 4'
+        fillOpacity: 0.06,
+        weight: 1.2,
+        dashArray: '6 4',
+        interactive: true
       });
-      circle.bindTooltip(`${t.id} · ${t.name}`, { sticky: true });
+      circle.bindTooltip(t.id + ' · ' + t.name, { sticky: true, className: 'ax-tip' });
       circle.on('click', () => {
-        document.getElementById('panel-title').textContent = `${t.id} · ${t.name}`;
-        document.getElementById('panel-body').innerHTML = `<div class="meta-grid">
-          <span class="label">ID</span><span class="value">${t.id}</span>
-          <span class="label">Name</span><span class="value">${t.name}</span>
-          <span class="label">Type</span><span class="value">TRACON / Approach</span>
-          <span class="label">Approx. radius</span><span class="value">${t.radiusNm} nm (visualization only)</span>
-          <span class="label">Center</span><span class="value">${t.lat.toFixed(3)}, ${t.lon.toFixed(3)}</span>
-        </div>
-        <p style="color:var(--text-dim);font-size:11px;margin-top:10px">Approximate coverage circle for situational awareness. Official TRACON boundaries are complex polygons published in FAA directives and not freely available as simple public GeoJSON for all facilities.</p>`;
+        document.getElementById('panel-title').textContent = t.id + ' · ' + t.name;
+        document.getElementById('panel-body').innerHTML = '<div class="meta-grid">' +
+          '<span class="label">ID</span><span class="value">' + t.id + '</span>' +
+          '<span class="label">Name</span><span class="value">' + t.name + '</span>' +
+          '<span class="label">Type</span><span class="value">TRACON / Approach</span>' +
+          '<span class="label">Approx. radius</span><span class="value">' + (t.radiusNm || 30) + ' nm</span>' +
+          '</div><p style="color:var(--text-dim);font-size:11px;margin-top:8px">Approximate coverage for awareness. Official boundaries are complex FAA polygons.</p>';
         document.getElementById('info-panel').classList.remove('hidden');
       });
       this.layers.tracon.addLayer(circle);
+      // center tick
+      const tick = L.circleMarker([t.lat, t.lon], {
+        radius: 3, color: '#00c8a0', fillColor: '#00c8a0', fillOpacity: 1, weight: 1
+      });
+      tick.bindTooltip(t.id, { permanent: false });
+      this.layers.tracon.addLayer(tick);
+    });
+  },
+
+  buildTowerLayer() {
+    if (typeof AirspaceData === 'undefined' || !AirspaceData.towers) return;
+    this.layers.towers.clearLayers();
+    AirspaceData.towers.forEach(tw => {
+      const m = L.circleMarker([tw.lat, tw.lon], {
+        radius: 3.5,
+        color: '#f0c040',
+        weight: 1,
+        fillColor: '#f0c040',
+        fillOpacity: 0.95
+      });
+      m.bindTooltip(tw.id + ' TWR', { className: 'ax-tip' });
+      m.on('click', () => {
+        document.getElementById('panel-title').textContent = tw.id + ' · ' + tw.name;
+        document.getElementById('panel-body').innerHTML = '<div class="meta-grid">' +
+          '<span class="label">Facility</span><span class="value">' + tw.id + '</span>' +
+          '<span class="label">Name</span><span class="value">' + tw.name + '</span>' +
+          '<span class="label">Type</span><span class="value">Control Tower</span>' +
+          '<span class="label">Position</span><span class="value">' + tw.lat.toFixed(4) + ', ' + tw.lon.toFixed(4) + '</span>' +
+          '</div>';
+        document.getElementById('info-panel').classList.remove('hidden');
+      });
+      this.layers.towers.addLayer(m);
     });
   }
 };

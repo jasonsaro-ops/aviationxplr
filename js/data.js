@@ -60,36 +60,66 @@ const DataStore = {
     }
   },
 
+  
   async fetchTraffic() {
     this.loading.traffic = true;
-    const { lamin, lomin, lamax, lomax } = CONFIG.openskyBbox;
-    const url = `${CONFIG.openskyStates}?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`;
-    try {
-      const res = await this.proxiedFetch(url);
-      const json = await res.json();
-      // states: [icao24, callsign, origin_country, time_position, last_contact, lon, lat, baro_altitude, on_ground, velocity, true_track, vertical_rate, ...]
-      this.traffic = (json.states || []).filter(s => s[5] != null && s[6] != null).map(s => ({
-        icao24: s[0],
-        callsign: (s[1] || '').trim(),
-        country: s[2],
-        lon: s[5],
-        lat: s[6],
-        alt: s[7],
-        onGround: s[8],
-        velocity: s[9],
-        track: s[10],
-        vrate: s[11],
-        squawk: s[14],
-        category: s[17]
-      }));
-      console.log(`[Data] Traffic: ${this.traffic.length} aircraft`);
-    } catch (e) {
-      console.warn('[Data] Traffic unavailable:', e.message);
-      this.traffic = [];
-    } finally {
-      this.loading.traffic = false;
-      this.lastUpdate = new Date();
+    const byHex = new Map();
+    const grid = CONFIG.trafficGrid || [{ lat: 39.5, lon: -98, }];
+    const nm = CONFIG.trafficRadiusNm || 250;
+    const jobs = grid.map(async (pt) => {
+      const url = (CONFIG.adsblolPoint || '')
+        .replace('{lat}', pt.lat)
+        .replace('{lon}', pt.lon)
+        .replace('{nm}', nm);
+      try {
+        const res = await this.proxiedFetch(url);
+        const json = await res.json();
+        const list = json.ac || json.aircraft || [];
+        list.forEach(a => {
+          if (a.lat == null || a.lon == null) return;
+          const hex = (a.hex || a.icao24 || '').toLowerCase();
+          if (!hex || byHex.has(hex)) return;
+          byHex.set(hex, {
+            icao24: hex,
+            callsign: (a.flight || a.callsign || '').trim(),
+            reg: a.r || '',
+            type: a.t || a.type || '',
+            lon: a.lon,
+            lat: a.lat,
+            alt: a.alt_baro != null && a.alt_baro !== 'ground' ? Number(a.alt_baro) * 0.3048 : (a.alt_geom != null ? Number(a.alt_geom) * 0.3048 : null),
+            onGround: a.alt_baro === 'ground' || a.gs === 0,
+            velocity: a.gs != null ? Number(a.gs) * 0.514444 : null, // kt → m/s
+            track: a.track != null ? Number(a.track) : null,
+            vrate: a.baro_rate != null ? Number(a.baro_rate) * 0.00508 : (a.geom_rate != null ? Number(a.geom_rate) * 0.00508 : null),
+            squawk: a.squawk || '',
+            category: a.category || ''
+          });
+        });
+      } catch (e) {
+        console.warn('[Data] traffic grid point failed', pt, e.message);
+      }
+    });
+    await Promise.allSettled(jobs);
+    this.traffic = Array.from(byHex.values());
+    // Fallback OpenSky if empty
+    if (!this.traffic.length) {
+      try {
+        const { lamin, lomin, lamax, lomax } = CONFIG.openskyBbox;
+        const url = `${CONFIG.openskyStates}?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`;
+        const res = await this.proxiedFetch(url);
+        const json = await res.json();
+        this.traffic = (json.states || []).filter(s => s[5] != null && s[6] != null).map(s => ({
+          icao24: s[0], callsign: (s[1] || '').trim(), country: s[2],
+          lon: s[5], lat: s[6], alt: s[7], onGround: s[8],
+          velocity: s[9], track: s[10], vrate: s[11], squawk: s[14]
+        }));
+      } catch (e2) {
+        console.warn('[Data] OpenSky fallback failed', e2.message);
+      }
     }
+    console.log(`[Data] Traffic: ${this.traffic.length} aircraft`);
+    this.loading.traffic = false;
+    this.lastUpdate = new Date();
   },
 
   async fetchTFRs() {

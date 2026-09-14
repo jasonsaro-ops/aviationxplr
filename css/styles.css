@@ -447,3 +447,30 @@ html, body {
 }
 .pattern-title { font-size: 12px; font-weight: 600; color: var(--text); }
 .pattern-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+/* Premium streamlining */
+.airport-marker { width: 5px !important; height: 5px !important; border-width: 1px; }
+.leaflet-tooltip.ax-tip, .ax-tip {
+  background: #0f141c !important;
+  border: 1px solid #1e2a3a !important;
+  color: #e0e8f0 !important;
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.45) !important;
+}
+.floating-panel { width: 360px; max-height: calc(100vh - 100px); }
+.panel-header h2 { font-size: 13px; letter-spacing: 0.03em; }
+.meta-grid { grid-template-columns: 90px 1fr; gap: 4px 8px; font-size: 12px; }
+#sidebar { width: 240px; font-size: 12px; }
+.layer-toggle { padding: 4px 2px; font-size: 12px; }
+.brand .title { font-size: 16px; }
+.brand .tag { font-size: 9px; }
+#topbar { height: 48px; }
+.status-group { font-size: 11px; }
+#bottombar { font-size: 10px; height: 32px; }
+.traffic-icon {
+  border-left-width: 4px;
+  border-right-width: 4px;
+  border-bottom-width: 11px;
+}
