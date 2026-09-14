@@ -104,4 +104,4 @@ OpenSky data is provided under their non-commercial research terms. TFRs and MET
 
 Code: MIT  
 Airport/runway data: Public Domain (OurAirports / Unlicense)  
-Map tiles: © OpenStreetMap / CARTO / Esri as attributed
+Map tiles: Esri World Dark Gray Canvas + Reference (no API key) · OpenStreetMap / Esri Imagery as attributed

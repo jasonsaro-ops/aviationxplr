@@ -23,12 +23,20 @@ const MapApp = {
       attributionControl: true
     });
 
-    // Base tiles
+    // Base tiles — Esri Dark Gray (no API key) + optional labels
     L.tileLayer(CONFIG.tiles.dark.url, {
       attribution: CONFIG.tiles.dark.attribution,
-      subdomains: CONFIG.tiles.dark.subdomains,
       maxZoom: CONFIG.tiles.dark.maxZoom
     }).addTo(this.map);
+
+    // Reference / labels overlay (also free, no key)
+    if (CONFIG.tiles.darkLabels) {
+      L.tileLayer(CONFIG.tiles.darkLabels.url, {
+        attribution: CONFIG.tiles.darkLabels.attribution,
+        maxZoom: CONFIG.tiles.darkLabels.maxZoom,
+        opacity: 0.9
+      }).addTo(this.map);
+    }
 
     // Layer groups
     this.layers.airports = L.markerClusterGroup({
@@ -44,6 +52,13 @@ const MapApp = {
 
     this.map.addLayer(this.layers.airports);
     this.map.addLayer(this.layers.runways);
+    // Add live layers if their checkboxes start checked
+    if (document.getElementById('lyr-traffic')?.checked) {
+      this.map.addLayer(this.layers.traffic);
+    }
+    if (document.getElementById('lyr-tfrs')?.checked) {
+      this.map.addLayer(this.layers.tfrs);
+    }
 
     // Wire layer toggles
     document.getElementById('lyr-airports').addEventListener('change', (e) => {

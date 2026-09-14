@@ -7,6 +7,30 @@ const DataStore = {
   lastUpdate: null,
   loading: { airports: false, traffic: false, tfrs: false },
 
+  /** Fetch via CORS proxy (with fallback) so browser can reach OpenSky / FAA / AWC */
+  async proxiedFetch(targetUrl) {
+    const proxies = [
+      (u) => CONFIG.corsProxy + encodeURIComponent(u),
+      (u) => CONFIG.corsProxyFallback + encodeURIComponent(u),
+      (u) => u // last resort: direct (may fail CORS)
+    ];
+    let lastErr;
+    for (const build of proxies) {
+      try {
+        const res = await fetch(build(targetUrl), {
+          method: 'GET',
+          headers: { 'Accept': 'application/json, text/plain, */*' }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res;
+      } catch (e) {
+        lastErr = e;
+        console.warn('[Data] Proxy attempt failed:', e.message);
+      }
+    }
+    throw lastErr || new Error('All fetch attempts failed');
+  },
+
   async loadAirports() {
     this.loading.airports = true;
     try {
@@ -39,28 +63,26 @@ const DataStore = {
     const { lamin, lomin, lamax, lomax } = CONFIG.openskyBbox;
     const url = `${CONFIG.openskyStates}?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`;
     try {
-      // OpenSky often blocks CORS from browsers; attempt + fallback
-      const res = await fetch(url, { mode: 'cors' });
-      if (!res.ok) throw new Error(`OpenSky ${res.status}`);
+      const res = await this.proxiedFetch(url);
       const json = await res.json();
-      // states is array of arrays: [icao24, callsign, origin_country, time_position, last_contact, lon, lat, baro_altitude, on_ground, velocity, true_track, vertical_rate, ...]
+      // states: [icao24, callsign, origin_country, time_position, last_contact, lon, lat, baro_altitude, on_ground, velocity, true_track, vertical_rate, ...]
       this.traffic = (json.states || []).filter(s => s[5] != null && s[6] != null).map(s => ({
         icao24: s[0],
         callsign: (s[1] || '').trim(),
         country: s[2],
         lon: s[5],
         lat: s[6],
-        alt: s[7],          // baro altitude meters
+        alt: s[7],
         onGround: s[8],
-        velocity: s[9],     // m/s
-        track: s[10],       // degrees
+        velocity: s[9],
+        track: s[10],
         vrate: s[11],
         squawk: s[14],
         category: s[17]
       }));
       console.log(`[Data] Traffic: ${this.traffic.length} aircraft`);
     } catch (e) {
-      console.warn('[Data] Traffic unavailable (CORS or rate limit). OpenSky requires non-browser or feeder account for reliable access.', e.message);
+      console.warn('[Data] Traffic unavailable:', e.message);
       this.traffic = [];
     } finally {
       this.loading.traffic = false;
@@ -71,14 +93,12 @@ const DataStore = {
   async fetchTFRs() {
     this.loading.tfrs = true;
     try {
-      const res = await fetch(CONFIG.tfrList, { mode: 'cors' });
-      if (!res.ok) throw new Error(`TFR ${res.status}`);
+      const res = await this.proxiedFetch(CONFIG.tfrList);
       const data = await res.json();
-      // Expected shape varies; normalize
-      this.tfrs = Array.isArray(data) ? data : (data.tfrs || data.items || []);
+      this.tfrs = Array.isArray(data) ? data : (data.tfrs || data.items || data.data || []);
       console.log(`[Data] TFRs: ${this.tfrs.length}`);
     } catch (e) {
-      console.warn('[Data] TFR list unavailable (CORS). Falling back to empty. See README for proxy options.', e.message);
+      console.warn('[Data] TFR list unavailable:', e.message);
       this.tfrs = [];
     } finally {
       this.loading.tfrs = false;
@@ -88,14 +108,15 @@ const DataStore = {
 
   async fetchMetar(icaoList) {
     if (!icaoList || !icaoList.length) return [];
-    const ids = icaoList.slice(0, 20).join(','); // limit
+    const ids = icaoList.slice(0, 15).join(',');
     const url = `${CONFIG.metarApi}?ids=${ids}&format=json`;
     try {
-      const res = await fetch(url, { mode: 'cors' });
-      if (!res.ok) throw new Error(`METAR ${res.status}`);
-      return await res.json();
+      const res = await this.proxiedFetch(url);
+      const data = await res.json();
+      // AWC sometimes returns array, sometimes object
+      return Array.isArray(data) ? data : (data.data || data.metar || [data]);
     } catch (e) {
-      console.warn('[Data] METAR fetch failed', e.message);
+      console.warn('[Data] METAR fetch failed:', e.message);
       return [];
     }
   },
