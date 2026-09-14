@@ -15,6 +15,66 @@ const UI = {
 
 
 
+
+  showChartPanel(p, feature) {
+    const icao = (p.icao || p.ident || '').toUpperCase();
+    const [lon, lat] = feature.geometry.coordinates;
+    const skyUrl = 'https://skyvector.com/?ll=' + lat.toFixed(5) + ',' + lon.toFixed(5) + '&chart=301&zoom=3';
+    const skyApt = icao ? 'https://skyvector.com/airport/' + icao : skyUrl;
+    const airnav = icao ? 'https://www.airnav.com/airport/' + icao : '';
+    const faa = icao.startsWith('K') && icao.length === 4
+      ? 'https://nfdc.faa.gov/nfdcApps/services/ajv5/airportDisplay.jsp?airportId=' + icao.substring(1)
+      : '';
+
+    let html = '<div class="chart-panel">';
+    html += '<p class="chart-note">SkyVector blocks embedding (X-Frame-Options). Charts open via official links; FAA sectional tiles are drawn on the map.</p>';
+    html += '<div class="resource-links">';
+    html += '<a class="res-link primary" href="' + skyApt + '" target="_blank" rel="noopener">Open SkyVector Airport ↗</a>';
+    html += '<a class="res-link primary" href="' + skyUrl + '" target="_blank" rel="noopener">SkyVector at coordinates ↗</a>';
+    if (airnav) html += '<a class="res-link" href="' + airnav + '" target="_blank" rel="noopener">AirNav ↗</a>';
+    if (faa) html += '<a class="res-link" href="' + faa + '" target="_blank" rel="noopener">FAA Airport Data ↗</a>';
+    html += '<a class="res-link" href="https://www.notams.faa.gov/dinsQueryWeb/" target="_blank" rel="noopener">FAA NOTAMs ↗</a>';
+    html += '</div>';
+
+    // Chart type quick actions on our map
+    html += '<div class="freq-title" style="margin-top:12px">MAP CHART LAYERS</div>';
+    html += '<div class="resource-links">';
+    html += '<button type="button" class="res-link btn-chart" data-chart="sectional">VFR Sectional on map</button>';
+    html += '<button type="button" class="res-link btn-chart" data-chart="ifrlow">IFR Low on map</button>';
+    html += '<button type="button" class="res-link btn-chart" data-chart="ifrhigh">IFR High on map</button>';
+    html += '</div>';
+
+    // Mini preview: static OSM/Esri snapshot link area
+    html += '<div class="freq-title" style="margin-top:12px">LOCATION</div>';
+    html += '<div class="meta-grid">';
+    html += '<span class="label">ICAO</span><span class="value">' + (icao || '—') + '</span>';
+    html += '<span class="label">Lat</span><span class="value">' + lat.toFixed(5) + '</span>';
+    html += '<span class="label">Lon</span><span class="value">' + lon.toFixed(5) + '</span>';
+    html += '</div></div>';
+
+    this.showDetail((icao || p.ident || 'Airport') + ' · Charts', html);
+
+    // Wire chart layer buttons
+    setTimeout(() => {
+      document.querySelectorAll('.btn-chart').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const kind = btn.getAttribute('data-chart');
+          if (typeof MapApp === 'undefined') return;
+          const layer = kind === 'sectional' ? MapApp.layers.sectional
+            : kind === 'ifrlow' ? MapApp.layers.ifrlow
+            : MapApp.layers.ifrhigh;
+          if (layer && !MapApp.map.hasLayer(layer)) MapApp.map.addLayer(layer);
+          MapApp.map.setView([lat, lon], kind === 'sectional' ? 9 : 7, { animate: true });
+        });
+      });
+    }, 50);
+
+    // Auto-load sectional under the airport
+    if (typeof MapApp !== 'undefined' && MapApp.showAirportCharts) {
+      MapApp.showAirportCharts(feature);
+    }
+  },
+
   showDetail(title, html) {
     const panel = document.getElementById('detail-panel');
     const titleEl = document.getElementById('detail-title');
@@ -169,6 +229,8 @@ const UI = {
     html += this.freqTableHtml(p.ident || p.icao || '');
     html += this.pilotResourcesHtml(p, feature);
     document.getElementById('panel-body').innerHTML = html;
+    // Charts companion panel (SkyVector links + enable sectional on map)
+    this.showChartPanel(p, feature);
     document.getElementById('info-panel').classList.remove('hidden');
 
     // Auto-fetch METAR and upgrade runway panel with wind

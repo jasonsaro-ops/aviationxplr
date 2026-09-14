@@ -597,3 +597,20 @@ html, body {
   background: rgba(0, 212, 255, 0.18);
   color: #fff;
 }
+
+.chart-note {
+  font-size: 11px;
+  color: var(--text-dim, #8a9bb0);
+  line-height: 1.4;
+  margin: 0 0 10px;
+}
+.res-link.primary {
+  background: rgba(0, 212, 255, 0.2);
+  border-color: rgba(0, 212, 255, 0.5);
+  color: #e8f8ff;
+  font-weight: 600;
+}
+button.res-link {
+  cursor: pointer;
+  font-family: inherit;
+}

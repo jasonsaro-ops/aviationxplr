@@ -74,6 +74,19 @@ const MapApp = {
     this.layers.pireps = L.layerGroup();
     this.layers.sigmets = L.layerGroup();
     this.layers.radar = L.layerGroup();
+    // FAA-style VFR sectional tiles (US coverage; free ArcGIS)
+    this.layers.sectional = L.tileLayer(
+      'https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 12, maxNativeZoom: 12, opacity: 0.95, attribution: 'FAA VFR Sectional' }
+    );
+    this.layers.ifrlow = L.tileLayer(
+      'https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/IFR_Low/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 10, opacity: 0.95, attribution: 'FAA IFR Low' }
+    );
+    this.layers.ifrhigh = L.tileLayer(
+      'https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/IFR_High/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 9, opacity: 0.95, attribution: 'FAA IFR High' }
+    );
 
     this.map.addLayer(this.layers.airports);
     this.map.addLayer(this.layers.runways);
@@ -82,11 +95,23 @@ const MapApp = {
       'Airports': this.layers.airports,
       'Runways': this.layers.runways,
       'Weather Radar': this.layers.radar,
+      'VFR Sectional': this.layers.sectional,
+      'IFR Low': this.layers.ifrlow,
+      'IFR High': this.layers.ifrhigh,
       'ARTCC / ACC': this.layers.artcc,
       'TRACON': this.layers.tracon,
       'Control Towers': this.layers.towers
     };
     L.control.layers(this._basemaps, overlays, { position: 'topright', collapsed: true }).addTo(this.map);
+
+    // When radar overlay toggled via Leaflet control, start/stop loop
+    this.map.on('overlayadd', (e) => {
+      if (e.name === 'Weather Radar') this.startRadarLoop();
+      if (e.name === 'VFR Sectional') { /* static tiles */ }
+    });
+    this.map.on('overlayremove', (e) => {
+      if (e.name === 'Weather Radar') this.stopRadarLoop();
+    });
 
     this.buildArtccLayer();
     this.buildTraconLayer();
@@ -107,6 +132,10 @@ const MapApp = {
     bind('lyr-airports', this.layers.airports);
     bind('lyr-runways', this.layers.runways);
     bind('lyr-radar', this.layers.radar);
+    document.getElementById('lyr-sectional')?.addEventListener('change', (e) => {
+      if (e.target.checked) this.map.addLayer(this.layers.sectional);
+      else this.map.removeLayer(this.layers.sectional);
+    });
     bind('lyr-artcc', this.layers.artcc);
     bind('lyr-tracon', this.layers.tracon);
     bind('lyr-towers', this.layers.towers);
@@ -220,6 +249,16 @@ const MapApp = {
     });
   },
 
+  showAirportCharts(feature) {
+    const p = feature.properties;
+    const [lon, lat] = feature.geometry.coordinates;
+    // Enable sectional overlay and zoom for US-style chart context
+    if (!this.map.hasLayer(this.layers.sectional)) {
+      try { this.map.addLayer(this.layers.sectional); } catch (e) {}
+    }
+    this.map.setView([lat, lon], Math.min(10, Math.max(8, this.map.getZoom())), { animate: true });
+  },
+
   focusAirport(feature) {
     const [lon, lat] = feature.geometry.coordinates;
     this.map.setView([lat, lon], 13, { animate: true });
@@ -234,11 +273,15 @@ const MapApp = {
       const data = await res.json();
       const host = data.host || 'https://tilecache.rainviewer.com';
       const frames = (data.radar && data.radar.past) ? data.radar.past : [];
-      this._radarFrames = frames.map(f => ({
-        path: f.path,
-        time: f.time,
-        url: host + f.path + '/256/{z}/{x}/{y}/2/1_1.png'
-      }));
+      this._radarFrames = frames.map(f => {
+        const path = typeof f.path === 'string' ? f.path : (f.path && f.path.path) || '';
+        return {
+          path,
+          time: f.time,
+          host,
+          url: host + path + '/256/{z}/{x}/{y}/2/1_1.png'
+        };
+      }).filter(f => f.path);
       // also nowcast if present
       if (data.radar && data.radar.nowcast) {
         data.radar.nowcast.forEach(f => {
@@ -257,32 +300,52 @@ const MapApp = {
 
   startRadarLoop() {
     this.stopRadarLoop();
-    this.map.addLayer(this.layers.radar);
+    if (!this.map.hasLayer(this.layers.radar)) this.map.addLayer(this.layers.radar);
+
+    const paint = () => {
+      this.layers.radar.clearLayers();
+      if (this._radarFrames && this._radarFrames.length) {
+        const fr = this._radarFrames[this._radarIdx % this._radarFrames.length];
+        const url = fr.url || (fr.host + fr.path + '/256/{z}/{x}/{y}/2/1_1.png');
+        const layer = L.tileLayer(url, {
+          opacity: 0.6,
+          attribution: 'Radar © RainViewer',
+          maxZoom: 12,
+          zIndex: 200
+        });
+        this.layers.radar.addLayer(layer);
+      } else {
+        // CONUS NEXRAD fallback
+        this.layers.radar.addLayer(L.tileLayer(CONFIG.nexradTile, {
+          opacity: 0.55,
+          attribution: 'NEXRAD · Iowa State',
+          maxZoom: 10,
+          zIndex: 200
+        }));
+      }
+    };
+
     if (!this._radarFrames.length) {
-      // static NEXRAD CONUS
-      const nx = L.tileLayer(CONFIG.nexradTile, {
-        opacity: 0.55, attribution: 'NEXRAD via Iowa State', maxZoom: 10
+      // try load frames then start
+      this.initRadar().then(() => {
+        this._radarIdx = Math.max(0, this._radarFrames.length - 1);
+        paint();
+        if (this._radarFrames.length > 1) {
+          this._radarTimer = setInterval(() => {
+            this._radarIdx = (this._radarIdx + 1) % this._radarFrames.length;
+            paint();
+          }, 700);
+        }
       });
-      this.layers.radar.addLayer(nx);
       return;
     }
-    let layer = null;
-    const show = (i) => {
-      this.layers.radar.clearLayers();
-      const fr = this._radarFrames[i];
-      layer = L.tileLayer(fr.url, {
-        opacity: 0.55,
-        attribution: 'RainViewer',
-        maxZoom: 12
-      });
-      this.layers.radar.addLayer(layer);
-    };
+
     this._radarIdx = Math.max(0, this._radarFrames.length - 1);
-    show(this._radarIdx);
+    paint();
     this._radarTimer = setInterval(() => {
       this._radarIdx = (this._radarIdx + 1) % this._radarFrames.length;
-      show(this._radarIdx);
-    }, 500);
+      paint();
+    }, 700);
   },
 
   stopRadarLoop() {
