@@ -29,6 +29,36 @@ const UI = {
     document.getElementById('detail-panel')?.classList.add('hidden');
   },
 
+
+  pilotResourcesHtml(p, feature) {
+    const icao = (p.icao || p.ident || '').toUpperCase();
+    const iata = (p.iata || '').toUpperCase();
+    const lat = feature.geometry.coordinates[1];
+    const lon = feature.geometry.coordinates[0];
+    const links = [];
+    if (icao) {
+      links.push(['SkyVector', 'https://skyvector.com/airport/' + icao]);
+      links.push(['AirNav', 'https://www.airnav.com/airport/' + icao]);
+      links.push(['FlightAware', 'https://www.flightaware.com/live/airport/' + icao]);
+      links.push(['OurAirports', 'https://ourairports.com/airports/' + icao + '/']);
+      // FAA airport diagram / charts (US K-prefix)
+      if (icao.startsWith('K') && icao.length === 4) {
+        links.push(['FAA Chart Supplement', 'https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/dafd/']);
+        links.push(['FAA Airport Diagram search', 'https://nfdc.faa.gov/nfdcApps/services/ajv5/airportDisplay.jsp?airportId=' + icao.substring(1)]);
+      }
+    }
+    if (iata) links.push(['Wikipedia search', 'https://en.wikipedia.org/wiki/' + encodeURIComponent(p.name || iata)]);
+    links.push(['Google Maps', 'https://www.google.com/maps?q=' + lat + ',' + lon]);
+    links.push(['OpenStreetMap', 'https://www.openstreetmap.org/?mlat=' + lat + '&mlon=' + lon + '#map=14/' + lat + '/' + lon]);
+
+    let html = '<div class="freq-block"><div class="freq-title">PILOT & PUBLIC RESOURCES</div><div class="resource-links">';
+    links.forEach(([label, href]) => {
+      html += '<a class="res-link" href="' + href + '" target="_blank" rel="noopener">' + label + ' ↗</a>';
+    });
+    html += '</div></div>';
+    return html;
+  },
+
   freqTableHtml(ident) {
     const list = (typeof DataStore !== 'undefined' && DataStore.getFrequencies)
       ? DataStore.getFrequencies(ident) : [];
@@ -137,6 +167,7 @@ const UI = {
       <div id="metar-result"></div>`;
 
     html += this.freqTableHtml(p.ident || p.icao || '');
+    html += this.pilotResourcesHtml(p, feature);
     document.getElementById('panel-body').innerHTML = html;
     document.getElementById('info-panel').classList.remove('hidden');
 

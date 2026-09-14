@@ -576,3 +576,24 @@ html, body {
   display: block;
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.7));
 }
+
+.resource-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.res-link {
+  display: inline-block;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  color: #7ddcff;
+  text-decoration: none;
+}
+.res-link:hover {
+  background: rgba(0, 212, 255, 0.18);
+  color: #fff;
+}

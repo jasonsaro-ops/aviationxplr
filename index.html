@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="description" content="AviationXplr — Mission-critical real-time US aviation explorer. Airports, runways, TFRs, weather, air traffic." />
-  <title>AviationXplr | Americas Aviation Mission Explorer</title>
+  <title>AviationXplr | Worldwide Aviation Mission Explorer</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-  <link rel="stylesheet" href="css/styles.css?v=10" />
+  <link rel="stylesheet" href="css/styles.css?v=11" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈</text></svg>" />
 </head>
 <body>
@@ -16,7 +16,7 @@
       <div class="brand">
         <span class="logo">✈</span>
         <span class="title">AVIATION<span class="accent">XPLR</span></span>
-        <span class="tag">AMERICAS · MISSION CRITICAL</span>
+        <span class="tag">WORLDWIDE · MISSION CRITICAL</span>
       </div>
       <div class="status-group">
         <div class="status-item" id="clock">--:--:-- Z</div>
@@ -35,7 +35,7 @@
         <h3>LAYERS</h3>
         <label class="layer-toggle"><input type="checkbox" id="lyr-airports" checked /> Airports</label>
         <label class="layer-toggle"><input type="checkbox" id="lyr-runways" checked /> Runways</label>
-        <label class="layer-toggle"><input type="checkbox" id="lyr-traffic" checked /> Live Traffic (ADS-B)</label>
+        <label class="layer-toggle"><input type="checkbox" id="lyr-radar" /> Weather Radar (NEXRAD / Global)</label>
         <label class="layer-toggle"><input type="checkbox" id="lyr-tfrs" checked /> TFRs</label>
         <label class="layer-toggle"><input type="checkbox" id="lyr-metar" /> METAR Stations</label>
         <label class="layer-toggle"><input type="checkbox" id="lyr-pirep" /> PIREPs</label>
@@ -57,16 +57,18 @@
       <div class="sidebar-section">
         <h3>DATA SOURCES</h3>
         <ul class="sources">
-          <li>OurAirports (airports/runways)</li>
-          <li>1800WXBRIEF / Leidos (TFR polygons, METAR)</li>\n          <li>FAA TFR List (fallback)</li>
-          <li>AviationWeather.gov (METAR)</li>
-          <li>OpenSky Network (ADS-B)</li>
+          <li>OurAirports — worldwide airports/runways/frequencies</li>
+          <li>RainViewer — global weather radar loop</li>
+          <li>Iowa State — CONUS NEXRAD</li>
+          <li>AviationWeather.gov — METAR/TAF</li>
+          <li>FAA / SkyVector / AirNav — charts & diagrams (links)</li>
+          <li>Esri — basemap styles</li>
         </ul>
         <p class="note">Auto-refresh every 2 min for live layers. Client-side only · GitHub Pages ready.</p>
       </div>
       <div class="sidebar-footer">
         <button id="btn-refresh" class="btn">↻ FORCE REFRESH</button>
-        <button id="btn-fit-americas" class="btn secondary">FIT AMERICAS</button>
+        <button id="btn-fit-world" class="btn secondary">FIT WORLD</button>
       </div>
     </aside>
 
@@ -100,17 +102,17 @@
         <span class="leg-item"><i class="dot traffic"></i> Aircraft</span>
         <span class="leg-item"><i class="dot tfr"></i> TFR</span>
       </div>
-      <div class="counts" id="counts">Airports: — · Traffic: — · TFRs: —</div>
+      <div class="counts" id="counts">Airports: — · Radar: — · TFRs: —</div>
     </footer>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="js/config.js?v=10"></script>
-  <script src="js/data.js?v=10"></script>
-  <script src="js/airspace.js?v=10"></script>
-  <script src="js/runway-panel.js?v=10"></script>
-  <script src="js/ui.js?v=10"></script>
-  <script src="js/map.js?v=10"></script>
-  <script src="js/app.js?v=10"></script>
+  <script src="js/config.js?v=11"></script>
+  <script src="js/data.js?v=11"></script>
+  <script src="js/airspace.js?v=11"></script>
+  <script src="js/runway-panel.js?v=11"></script>
+  <script src="js/ui.js?v=11"></script>
+  <script src="js/map.js?v=11"></script>
+  <script src="js/app.js?v=11"></script>
 </body>
 </html>

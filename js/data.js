@@ -63,7 +63,7 @@ const DataStore = {
       const res = await fetch(CONFIG.airportsGeoJSON);
       if (!res.ok) throw new Error('Airports fetch failed');
       this.airports = await res.json();
-      console.log(`[Data] Loaded ${this.airports.features.length} US airports`);
+      console.log(`[Data] Loaded ${this.airports.features.length} worldwide airports`);
     } catch (e) {
       console.error('[Data] Airports error', e);
       this.airports = { type: 'FeatureCollection', features: [] };
