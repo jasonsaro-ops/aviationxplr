@@ -1,8 +1,8 @@
 # AviationXplr
 
-**Mission-critical US National Airspace System explorer**
+**Mission-critical North & South America aviation explorer**
 
-Professional, real-time (as close as public sources allow) map of every US airport, runways, Temporary Flight Restrictions (TFRs), aviation weather (METAR), and live ADS-B traffic where available.
+Professional, real-time (as close as public sources allow) map of every airport across North and South America, runways, Temporary Flight Restrictions (TFRs), aviation weather (METAR), and live ADS-B traffic where available.
 
 Styled for operations / briefing use — dark theme, high contrast, clickable metadata panels, layer toggles, 2-minute auto-refresh.
 
@@ -58,7 +58,7 @@ aviationxplr/
 │   ├── ui.js          # panels, search, status
 │   └── app.js         # bootstrap
 ├── data/
-│   ├── us_airports.geojson   # ~25k US airports
+│   ├── us_airports.geojson   # ~42k airports (NA + SA)
 │   └── runways_by_ident.json
 └── README.md
 ```

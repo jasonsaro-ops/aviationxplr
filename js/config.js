@@ -1,8 +1,8 @@
 /* AviationXplr configuration */
 const CONFIG = {
   // Map
-  defaultCenter: [39.8, -98.5], // CONUS center
-  defaultZoom: 5,
+  defaultCenter: [15, -80], // CONUS center
+  defaultZoom: 3,
   minZoom: 3,
   maxZoom: 18,
 
@@ -10,7 +10,7 @@ const CONFIG = {
   refreshInterval: 2 * 60 * 1000, // 2 minutes
 
   // Data paths (relative for GitHub Pages)
-  airportsGeoJSON: 'data/us_airports.geojson',
+  airportsGeoJSON: 'data/namer_samer_airports.geojson',
   runwaysJSON: 'data/runways_by_ident.json',
 
   // Public APIs (client-side)
@@ -19,20 +19,29 @@ const CONFIG = {
   adsblolPoint: 'https://api.adsb.lol/v2/lat/{lat}/lon/{lon}/dist/{nm}',
   // Grid centers to cover CONUS (~250nm each)
   trafficGrid: [
-    { lat: 47.5, lon: -122.0 }, { lat: 45.5, lon: -100.0 }, { lat: 42.5, lon: -71.5 },
-    { lat: 40.0, lon: -111.0 }, { lat: 39.5, lon: -98.0 }, { lat: 40.5, lon: -80.0 },
-    { lat: 34.0, lon: -118.0 }, { lat: 33.0, lon: -97.0 }, { lat: 33.5, lon: -84.0 },
-    { lat: 29.0, lon: -95.0 }, { lat: 28.0, lon: -81.5 }, { lat: 36.0, lon: -115.0 }
+    { lat: 45, lon: -120 }, { lat: 40, lon: -100 }, { lat: 40, lon: -80 },
+    { lat: 30, lon: -95 }, { lat: 25, lon: -80 }, { lat: 20, lon: -100 },
+    { lat: 10, lon: -85 }, { lat: 0, lon: -60 }, { lat: -15, lon: -50 },
+    { lat: -23, lon: -46 }, { lat: -33, lon: -70 }, { lat: -34, lon: -58 },
+    { lat: 50, lon: -100 }, { lat: 55, lon: -120 }, { lat: 61, lon: -150 }
   ],
-  trafficRadiusNm: 280,
+  trafficRadiusNm: 350,
   // Bounding box for CONUS roughly to reduce payload
-  openskyBbox: { lamin: 24.0, lomin: -125.0, lamax: 50.0, lomax: -66.0 },
+  openskyBbox: { lamin: -56.0, lomin: -170.0, lamax: 72.0, lomax: -30.0 },
 
   // FAA TFR list (JSON)
   tfrList: 'https://tfr.faa.gov/tfrapi/exportTfrList',
 
   // Aviation Weather Center
   metarApi: 'https://aviationweather.gov/api/data/metar',
+  // AviationWeather.gov bulk products (worldwide coverage for METARs)
+  aviationweatherMetar: 'https://aviationweather.gov/api/data/metar',
+  aviationweatherTaf: 'https://aviationweather.gov/api/data/taf',
+  aviationweatherPirep: 'https://aviationweather.gov/api/data/pirep',
+  aviationweatherSigmet: 'https://aviationweather.gov/api/data/airsigmet',
+  aviationweatherGairmet: 'https://aviationweather.gov/api/data/gairmet',
+  // OpenSky worldwide states
+  openskyAll: 'https://opensky-network.org/api/states/all',
   // Example: ?ids=KJFK,KLAX&format=json
 
   // CORS proxy — free public relays so browser can reach OpenSky / FAA / AWC
@@ -44,7 +53,7 @@ const CONFIG = {
   // METAR category points + TFR polygons with full NOTAM text
   wxbriefDataLayer: 'https://www.1800wxbrief.com/Website/Graphics/api/dataLayer',
   wxbriefLayers: 'metaf,tfr',
-  wxbriefBbox: { west: -125, south: 24, east: -66, north: 50 },
+  wxbriefBbox: { west: -170, south: -56, east: -30, north: 72 },
 
   // Tile layers — NO API KEY REQUIRED
   // Primary dark: Esri World Dark Gray Canvas (free, no key)

@@ -1,56 +1,60 @@
-/* Main application bootstrap */
+/* Main application bootstrap — fast path */
 (async function () {
   'use strict';
 
-  // Clock
   UI.updateClock();
   setInterval(() => UI.updateClock(), 1000);
 
   UI.init();
-  MapApp.init();
+  MapApp.init(); // map paints immediately with tiles
 
-  // Initial data load
   UI.setLive(false);
   document.getElementById('last-update').textContent = 'LOADING…';
 
-  await Promise.all([
-    DataStore.loadAirports(),
-    DataStore.loadRunways()
-  ]);
+  // Phase 1: airports only (critical path)
+  try {
+    await DataStore.loadAirports();
+    MapApp.renderAirports();
+    UI.setLastUpdate(new Date());
+    UI.setLive(true);
+  } catch (e) {
+    console.error('Airport load failed', e);
+    document.getElementById('last-update').textContent = 'AIRPORT LOAD ERROR';
+  }
 
-  MapApp.renderAirports();
-  UI.setLastUpdate(new Date());
-  UI.setLive(true);
+  // Phase 2: runways in background (not blocking map)
+  DataStore.loadRunways().catch(e => console.warn('Runways deferred load failed', e));
 
-  // Live feeds (best-effort)
+  // Live feeds
   async function refreshLive() {
-    const trafficOn = document.getElementById('lyr-traffic').checked;
-    const tfrOn = document.getElementById('lyr-tfrs').checked;
-
     const jobs = [];
-    if (trafficOn) jobs.push(DataStore.fetchTraffic().then(() => MapApp.renderTraffic()));
-    if (tfrOn) {
+    if (document.getElementById('lyr-traffic')?.checked) {
+      jobs.push(DataStore.fetchTraffic().then(() => MapApp.renderTraffic()));
+    }
+    if (document.getElementById('lyr-tfrs')?.checked) {
       jobs.push(
         DataStore.fetchWxBrief()
           .then(() => MapApp.renderTFRs())
           .catch(() => DataStore.fetchTFRs().then(() => MapApp.renderTFRs()))
       );
     }
-
+    if (document.getElementById('lyr-pirep')?.checked) {
+      jobs.push(DataStore.fetchPireps().then(() => MapApp.renderPireps()));
+    }
+    if (document.getElementById('lyr-sigmet')?.checked) {
+      jobs.push(DataStore.fetchSigmets().then(() => MapApp.renderSigmets()));
+    }
     if (jobs.length) {
       await Promise.allSettled(jobs);
       UI.setLastUpdate(DataStore.lastUpdate || new Date());
     }
   }
 
-  // First live pull after a short delay so map paints first
-  setTimeout(refreshLive, 1500);
-
-  // Auto every 2 minutes
+  // First live pull after map is interactive
+  setTimeout(refreshLive, 2000);
   setInterval(refreshLive, CONFIG.refreshInterval);
 
-  // Manual refresh
-  document.getElementById('btn-refresh').addEventListener('click', () => {
+  document.getElementById('btn-refresh')?.addEventListener('click', () => {
     refreshLive();
     MapApp.renderAirports();
   });

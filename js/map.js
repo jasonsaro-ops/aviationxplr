@@ -2,7 +2,7 @@
 const MapApp = {
   map: null,
   layers: {
-    airports: null,      // MarkerClusterGroup
+    airports: null,      // LayerGroup
     runways: null,       // LayerGroup of polylines
     traffic: null,       // LayerGroup
     tfrs: null,          // LayerGroup (points / simple markers for list)
@@ -49,6 +49,8 @@ const MapApp = {
     this.layers.artcc = L.layerGroup();
     this.layers.tracon = L.layerGroup();
     this.layers.towers = L.layerGroup();
+    this.layers.pireps = L.layerGroup();
+    this.layers.sigmets = L.layerGroup();
 
     this.map.addLayer(this.layers.airports);
     this.map.addLayer(this.layers.runways);
@@ -99,14 +101,22 @@ const MapApp = {
       if (e.target.checked) this.map.addLayer(this.layers.towers);
       else this.map.removeLayer(this.layers.towers);
     });
+    document.getElementById('lyr-pirep')?.addEventListener('change', (e) => {
+      if (e.target.checked) { this.map.addLayer(this.layers.pireps); DataStore.fetchPireps().then(() => this.renderPireps()); }
+      else this.map.removeLayer(this.layers.pireps);
+    });
+    document.getElementById('lyr-sigmet')?.addEventListener('change', (e) => {
+      if (e.target.checked) { this.map.addLayer(this.layers.sigmets); DataStore.fetchSigmets().then(() => this.renderSigmets()); }
+      else this.map.removeLayer(this.layers.sigmets);
+    });
 
     // Filters
     ['flt-large','flt-medium','flt-small','flt-heli','flt-seaplane','flt-scheduled'].forEach(id => {
       document.getElementById(id).addEventListener('change', () => this.applyFilters());
     });
 
-    document.getElementById('btn-fit-us').addEventListener('click', () => {
-      this.map.fitBounds([[24.5, -125], [49.5, -66.5]]);
+    document.getElementById('btn-fit-americas').addEventListener('click', () => {
+      this.map.fitBounds([[-56, -170], [72, -30]]);
     });
   },
 
@@ -129,47 +139,62 @@ const MapApp = {
     return false;
   },
 
+
   renderAirports() {
     this.layers.airports.clearLayers();
     this.airportIndex = {};
     if (!DataStore.airports) return;
 
-    let count = 0;
     const features = DataStore.airports.features;
+    const toAdd = [];
     for (let i = 0; i < features.length; i++) {
       const f = features[i];
       const p = f.properties;
       if (!this.typeAllowed(p.type)) continue;
       if (this.filters.scheduled && !p.scheduled) continue;
-
-      const [lon, lat] = f.geometry.coordinates;
-      const color = CONFIG.airportColors[p.type] || '#8a9bb0';
-      const radius = p.type === 'large_airport' ? 4 : (p.type === 'medium_airport' ? 3 : 2);
-      const marker = L.circleMarker([lat, lon], {
-        radius,
-        color: '#0a0e14',
-        weight: 0.8,
-        fillColor: color,
-        fillOpacity: 0.9,
-        title: p.name
-      });
-      marker.feature = f;
-      marker.on('click', () => {
-        UI.showAirport(f);
-        this.highlightRunways(p.ident);
-      });
-      this.layers.airports.addLayer(marker);
-      this.airportIndex[p.ident] = marker;
-      count++;
+      toAdd.push(f);
     }
-    UI.updateCounts({
-      airports: count,
-      traffic: DataStore.traffic.length,
-      tfrs: DataStore.tfrs.length
-    });
+
+    // Chunk paint so UI stays responsive
+    const CHUNK = 2000;
+    let idx = 0;
+    const self = this;
+    function paintChunk() {
+      const end = Math.min(idx + CHUNK, toAdd.length);
+      for (; idx < end; idx++) {
+        const f = toAdd[idx];
+        const p = f.properties;
+        const [lon, lat] = f.geometry.coordinates;
+        const color = CONFIG.airportColors[p.type] || '#8a9bb0';
+        const radius = p.type === 'large_airport' ? 4 : (p.type === 'medium_airport' ? 3 : 2);
+        const marker = L.circleMarker([lat, lon], {
+          radius,
+          color: '#0a0e14',
+          weight: 0.6,
+          fillColor: color,
+          fillOpacity: 0.9
+        });
+        marker.feature = f;
+        marker.on('click', () => {
+          UI.showAirport(f);
+          self.highlightRunways(p.ident);
+        });
+        self.layers.airports.addLayer(marker);
+        self.airportIndex[p.ident] = marker;
+      }
+      UI.updateCounts({
+        airports: idx,
+        traffic: DataStore.traffic.length,
+        tfrs: (DataStore.wxbriefTfrs || DataStore.tfrs || []).length
+      });
+      if (idx < toAdd.length) {
+        requestAnimationFrame(paintChunk);
+      }
+    }
+    paintChunk();
   },
 
-  highlightRunways(ident) {
+  highlightRunwayshighlightRunways(ident) {
     this.layers.runways.clearLayers();
     const rwys = DataStore.getRunways(ident);
     rwys.forEach(r => {
@@ -278,10 +303,59 @@ const MapApp = {
     this.highlightRunways(feature.properties.ident);
   },
 
+
+  renderPireps() {
+    this.layers.pireps.clearLayers();
+    (DataStore.pireps || []).forEach(p => {
+      const lat = p.lat != null ? p.lat : (p.latitude != null ? p.latitude : null);
+      const lon = p.lon != null ? p.lon : (p.longitude != null ? p.longitude : null);
+      if (lat == null || lon == null) return;
+      const m = L.circleMarker([lat, lon], {
+        radius: 4, color: '#ffaa00', fillColor: '#ffaa00', fillOpacity: 0.8, weight: 1
+      });
+      const txt = p.rawOb || p.raw_text || p.report || JSON.stringify(p).slice(0, 200);
+      m.bindTooltip('PIREP', { className: 'ax-tip' });
+      m.on('click', () => {
+        document.getElementById('panel-title').textContent = 'PIREP';
+        document.getElementById('panel-body').innerHTML = '<div class="metar-box">' + String(txt).replace(/</g,'&lt;') + '</div>';
+        document.getElementById('info-panel').classList.remove('hidden');
+      });
+      this.layers.pireps.addLayer(m);
+    });
+  },
+
+  renderSigmets() {
+    this.layers.sigmets.clearLayers();
+    (DataStore.sigmets || []).forEach(s => {
+      // try geometry
+      const geom = s.geometry || s.coords;
+      const label = s.hazard || s.airsigmetType || s.rawAirSigmet || 'SIGMET';
+      if (geom && geom.coordinates) {
+        try {
+          const layer = L.geoJSON(geom, {
+            style: { color: '#ff6060', fillColor: '#ff6060', fillOpacity: 0.15, weight: 1.5 }
+          });
+          layer.bindTooltip(String(label).slice(0, 40), { className: 'ax-tip' });
+          layer.on('click', () => {
+            document.getElementById('panel-title').textContent = 'SIGMET / AIRMET';
+            document.getElementById('panel-body').innerHTML = '<div class="metar-box">' + String(s.rawAirSigmet || s.raw || JSON.stringify(s)).replace(/</g,'&lt;') + '</div>';
+            document.getElementById('info-panel').classList.remove('hidden');
+          });
+          this.layers.sigmets.addLayer(layer);
+        } catch (e) {}
+      }
+    });
+  },
+
   buildArtccLayer() {
     if (typeof AirspaceData === 'undefined') return;
     this.layers.artcc.clearLayers();
-    AirspaceData.artcc.forEach(c => {
+    const centers = [
+      ...(AirspaceData.artcc || []),
+      ...(AirspaceData.canadaAcc || []),
+      ...(AirspaceData.latamAcc || [])
+    ];
+    centers.forEach(c => {
       const m = L.circleMarker([c.lat, c.lon], {
         radius: 5,
         color: '#9b7bff',

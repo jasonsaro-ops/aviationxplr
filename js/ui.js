@@ -86,6 +86,7 @@ const UI = {
       <span class="label">Type</span><span class="value">${(p.type || '').replace(/_/g, ' ')}</span>
       <span class="label">Elevation</span><span class="value">${p.elev_ft != null ? p.elev_ft + ' ft' : '—'}</span>
       <span class="label">Municipality</span><span class="value">${p.municipality || '—'}</span>
+      <span class="label">Country</span><span class="value">${p.country || '—'}</span>
       <span class="label">Region</span><span class="value">${p.region || '—'}</span>
       <span class="label">Scheduled</span><span class="value">${p.scheduled ? 'Yes' : 'No'}</span>
       <span class="label">Coordinates</span><span class="value">${feature.geometry.coordinates[1].toFixed(5)}, ${feature.geometry.coordinates[0].toFixed(5)}</span>

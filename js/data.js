@@ -5,7 +5,9 @@ const DataStore = {
   traffic: [],             // current aircraft states
   tfrs: [],                // TFR list
   wxbriefMetars: [],       // from 1800wxbrief metaf
-  wxbriefTfrs: [],         // from 1800wxbrief with geometry
+  wxbriefTfrs: [],
+  pireps: [],
+  sigmets: [],         // from 1800wxbrief with geometry
   lastUpdate: null,
   loading: { airports: false, traffic: false, tfrs: false },
 
@@ -190,6 +192,34 @@ const DataStore = {
       this.wxbriefTfrs = [];
     } finally {
       this.lastUpdate = new Date();
+    }
+  },
+
+
+  async fetchPireps() {
+    // AviationWeather PIREPs last 2 hours, Americas bbox via proxy
+    const url = 'https://aviationweather.gov/api/data/pirep?format=json&age=2';
+    try {
+      const res = await this.proxiedFetch(url);
+      const data = await res.json();
+      this.pireps = Array.isArray(data) ? data : (data.data || []);
+      console.log('[Data] PIREPs', this.pireps.length);
+    } catch (e) {
+      console.warn('[Data] PIREP failed', e.message);
+      this.pireps = [];
+    }
+  },
+
+  async fetchSigmets() {
+    const url = 'https://aviationweather.gov/api/data/airsigmet?format=json';
+    try {
+      const res = await this.proxiedFetch(url);
+      const data = await res.json();
+      this.sigmets = Array.isArray(data) ? data : (data.data || []);
+      console.log('[Data] SIGMETs', this.sigmets.length);
+    } catch (e) {
+      console.warn('[Data] SIGMET failed', e.message);
+      this.sigmets = [];
     }
   },
 

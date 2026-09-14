@@ -126,4 +126,32 @@ const AirspaceData = {
     { id: 'KBOI', name: 'Boise Tower', lat: 43.5644, lon: -116.2228 },
     { id: 'KGEG', name: 'Spokane Tower', lat: 47.6199, lon: -117.5338 }
   ]
+,
+  canadaAcc: [
+    { id: 'CZVR', name: 'Vancouver ACC', lat: 49.2, lon: -123.1 },
+    { id: 'CZEG', name: 'Edmonton ACC', lat: 53.5, lon: -113.5 },
+    { id: 'CZWG', name: 'Winnipeg ACC', lat: 49.9, lon: -97.2 },
+    { id: 'CZYZ', name: 'Toronto ACC', lat: 43.7, lon: -79.4 },
+    { id: 'CZUL', name: 'Montreal ACC', lat: 45.5, lon: -73.6 },
+    { id: 'CZQX', name: 'Gander ACC', lat: 48.9, lon: -54.6 },
+    { id: 'CZQM', name: 'Moncton ACC', lat: 46.1, lon: -64.7 }
+  ],
+  latamAcc: [
+    { id: 'MMMX', name: 'Mexico City ACC', lat: 19.4, lon: -99.1 },
+    { id: 'MMTY', name: 'Monterrey ACC', lat: 25.8, lon: -100.2 },
+    { id: 'MUGM', name: 'Havana ACC', lat: 23.0, lon: -82.4 },
+    { id: 'MPTO', name: 'Panama ACC', lat: 9.0, lon: -79.5 },
+    { id: 'SKBO', name: 'Bogota ACC', lat: 4.7, lon: -74.1 },
+    { id: 'SPIM', name: 'Lima ACC', lat: -12.0, lon: -77.1 },
+    { id: 'SCEL', name: 'Santiago ACC', lat: -33.4, lon: -70.8 },
+    { id: 'SAEZ', name: 'Buenos Aires ACC', lat: -34.8, lon: -58.5 },
+    { id: 'SBGR', name: 'Sao Paulo ACC', lat: -23.4, lon: -46.5 },
+    { id: 'SBGL', name: 'Rio de Janeiro ACC', lat: -22.8, lon: -43.3 },
+    { id: 'SBRJ', name: 'Brasilia ACC', lat: -15.8, lon: -47.9 },
+    { id: 'SVMI', name: 'Maiquetia ACC', lat: 10.6, lon: -67.0 },
+    { id: 'SEQM', name: 'Quito ACC', lat: -0.1, lon: -78.4 },
+    { id: 'SLLP', name: 'La Paz ACC', lat: -16.5, lon: -68.2 },
+    { id: 'SGAS', name: 'Asuncion ACC', lat: -25.2, lon: -57.5 },
+    { id: 'SUMU', name: 'Montevideo ACC', lat: -34.8, lon: -56.0 }
+  ]
 };
