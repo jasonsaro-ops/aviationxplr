@@ -105,3 +105,18 @@ OpenSky data is provided under their non-commercial research terms. TFRs and MET
 Code: MIT  
 Airport/runway data: Public Domain (OurAirports / Unlicense)  
 Map tiles: Esri World Dark Gray Canvas + Reference (no API key) · OpenStreetMap / Esri Imagery as attributed
+
+
+## Live ADS-B / METAR (required one-time setup)
+
+GitHub Pages cannot call aviation APIs from the browser (CORS). Deploy the included free Cloudflare Worker:
+
+1. Open [Cloudflare Workers](https://workers.cloudflare.com) → Create Worker
+2. Paste `worker/cors-proxy.js` → Deploy
+3. Set in `js/config.js`:
+   ```js
+   corsWorker: 'https://YOUR_NAME.workers.dev',
+   ```
+4. Push and hard-refresh
+
+Without this, airports, runways, frequencies, and airspace layers still work; live traffic/METAR/TFRs will not.

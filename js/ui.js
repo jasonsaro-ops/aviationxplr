@@ -1,6 +1,7 @@
 /* UI helpers: panels, search, status */
 const UI = {
   init() {
+    document.getElementById('detail-close')?.addEventListener('click', () => this.hideDetail());
     document.getElementById('panel-close').addEventListener('click', () => this.hidePanel());
     document.getElementById('search').addEventListener('input', (e) => this.onSearch(e.target.value));
     document.getElementById('search').addEventListener('keydown', (e) => {
@@ -12,6 +13,21 @@ const UI = {
     });
   },
 
+
+
+  showDetail(title, html) {
+    const panel = document.getElementById('detail-panel');
+    const titleEl = document.getElementById('detail-title');
+    const body = document.getElementById('detail-body');
+    if (!panel || !body) return;
+    if (titleEl) titleEl.textContent = title;
+    body.innerHTML = html;
+    panel.classList.remove('hidden');
+  },
+
+  hideDetail() {
+    document.getElementById('detail-panel')?.classList.add('hidden');
+  },
 
   freqTableHtml(ident) {
     const list = (typeof DataStore !== 'undefined' && DataStore.getFrequencies)
@@ -161,7 +177,25 @@ const UI = {
   },
 
   showTraffic(ac) {
-    document.getElementById('panel-title').textContent = ac.callsign || ac.icao24 || 'Aircraft';
+    const airportOpen = !document.getElementById('info-panel')?.classList.contains('hidden');
+    const title = ac.callsign || ac.icao24 || 'Aircraft';
+    if (airportOpen) {
+      // keep airport panel; show aircraft in detail panel
+      const altFt = ac.alt != null ? Math.round(ac.alt * 3.28084) + ' ft' : '—';
+      const spdKt = ac.velocity != null ? Math.round(ac.velocity * 1.94384) + ' kt' : '—';
+      const html = `<div class="meta-grid">
+        <span class="label">ICAO24</span><span class="value">${ac.icao24 || '—'}</span>
+        <span class="label">Callsign</span><span class="value">${ac.callsign || '—'}</span>
+        <span class="label">Type</span><span class="value">${ac.type || '—'}</span>
+        <span class="label">Altitude</span><span class="value">${altFt}</span>
+        <span class="label">Groundspeed</span><span class="value">${spdKt}</span>
+        <span class="label">Track</span><span class="value">${ac.track != null ? Math.round(ac.track) + '°' : '—'}</span>
+        <span class="label">Squawk</span><span class="value">${ac.squawk || '—'}</span>
+      </div>`;
+      this.showDetail(title, html);
+      return;
+    }
+    document.getElementById('panel-title').textContent = title;
     const altFt = ac.alt != null ? Math.round(ac.alt * 3.28084) + ' ft' : '—';
     const spdKt = ac.velocity != null ? Math.round(ac.velocity * 1.94384) + ' kt' : '—';
     const html = `<div class="meta-grid">
@@ -184,7 +218,6 @@ const UI = {
 
   showRunway(r, airportIdent) {
     const label = (r.le_ident || '?') + '/' + (r.he_ident || '?');
-    document.getElementById('panel-title').textContent = (airportIdent || '') + ' · RWY ' + label;
     let html = '<div class="meta-grid">' +
       '<span class="label">Runway</span><span class="value">' + label + '</span>' +
       '<span class="label">Length</span><span class="value">' + (r.length_ft != null ? r.length_ft + ' ft' : '—') + '</span>' +
@@ -197,9 +230,7 @@ const UI = {
       '<span class="label">LE elev</span><span class="value">' + (r.le_elev != null ? r.le_elev + ' ft' : '—') + '</span>' +
       '<span class="label">HE elev</span><span class="value">' + (r.he_elev != null ? r.he_elev + ' ft' : '—') + '</span>' +
       '</div>';
-    if (airportIdent && this.freqTableHtml) html += this.freqTableHtml(airportIdent);
-    document.getElementById('panel-body').innerHTML = html;
-    document.getElementById('info-panel').classList.remove('hidden');
+    this.showDetail((airportIdent || '') + ' · RWY ' + label, html);
   },
 
   showTFR(tfr) {

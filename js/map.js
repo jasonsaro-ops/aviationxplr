@@ -21,23 +21,45 @@ const MapApp = {
       maxZoom: CONFIG.maxZoom,
       zoomControl: true,
       attributionControl: true,
-      preferCanvas: true
+      preferCanvas: false
     });
 
-    // Base tiles — Esri Dark Gray (no API key) + optional labels
-    L.tileLayer(CONFIG.tiles.dark.url, {
+    // Basemaps (switchable) — all free, no API key
+    const esriDark = L.tileLayer(CONFIG.tiles.dark.url, {
       attribution: CONFIG.tiles.dark.attribution,
-      maxZoom: CONFIG.tiles.dark.maxZoom
-    }).addTo(this.map);
+      maxZoom: 18,
+      maxNativeZoom: 16
+    });
+    const esriLabels = L.tileLayer(CONFIG.tiles.darkLabels.url, {
+      attribution: '',
+      maxZoom: 18,
+      maxNativeZoom: 16,
+      opacity: 0.9
+    });
+    const cartoDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OSM &copy; CARTO',
+      subdomains: 'abcd',
+      maxZoom: 20,
+      maxNativeZoom: 20
+    });
+    const esriImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles &copy; Esri',
+      maxZoom: 19,
+      maxNativeZoom: 19
+    });
+    // Default: Carto dark (sharp at high zoom) — falls back if tiles blocked
+    cartoDark.addTo(this.map);
+    this._basemaps = {
+      'Dark (Carto)': cartoDark,
+      'Dark Gray (Esri)': L.layerGroup([esriDark, esriLabels]),
+      'Satellite (Esri)': esriImagery
+    };
+    L.control.layers(this._basemaps, null, { position: 'topright', collapsed: true }).addTo(this.map);
 
-    // Reference / labels overlay (also free, no key)
-    if (CONFIG.tiles.darkLabels) {
-      L.tileLayer(CONFIG.tiles.darkLabels.url, {
-        attribution: CONFIG.tiles.darkLabels.attribution,
-        maxZoom: CONFIG.tiles.darkLabels.maxZoom,
-        opacity: 0.9
-      }).addTo(this.map);
-    }
+    setTimeout(() => { try { this.map.invalidateSize(); } catch (e) {} }, 200);
+    this.map.on('zoomend', () => {
+      try { this.map.invalidateSize(false); } catch (e) {}
+    });
 
     // Layer groups
     // No clustering — sleek individual markers (canvas for performance)
@@ -237,23 +259,40 @@ const MapApp = {
     });
   },
 
+
   renderTraffic() {
     this.layers.traffic.clearLayers();
-    DataStore.traffic.forEach(ac => {
+    const list = DataStore.traffic || [];
+    list.forEach(ac => {
+      if (ac.lat == null || ac.lon == null) return;
       const rot = ac.track != null ? ac.track : 0;
+      const altFt = ac.alt != null ? ac.alt * 3.28084 : null;
+      // altitude color bands
+      let color = '#8a9bb0';
+      if (altFt == null || ac.onGround) color = '#6a7a8a';
+      else if (altFt < 10000) color = '#20e070';
+      else if (altFt < 25000) color = '#00d4ff';
+      else if (altFt < 35000) color = '#f0c040';
+      else color = '#ff6080';
+
       const icon = L.divIcon({
         className: 'ac-marker',
-        html: '<div class="traffic-icon" style="transform:rotate(' + rot + 'deg)"></div>',
-        iconSize: [10, 12],
-        iconAnchor: [5, 6]
+        html: '<div class="traffic-icon" style="border-bottom-color:' + color + ';transform:rotate(' + rot + 'deg)"></div>',
+        iconSize: [12, 14],
+        iconAnchor: [6, 7]
       });
-      const m = L.marker([ac.lat, ac.lon], { icon, title: ac.callsign || ac.icao24, riseOnHover: true });
+      const label = (ac.callsign || ac.icao24 || '').trim();
+      const m = L.marker([ac.lat, ac.lon], { icon, title: label, riseOnHover: true, keyboard: false });
+      m.bindTooltip(
+        label + (altFt != null ? ' · ' + Math.round(altFt) + ' ft' : ''),
+        { direction: 'top', offset: [0, -8], className: 'ax-tip', opacity: 0.95 }
+      );
       m.on('click', () => UI.showTraffic(ac));
       this.layers.traffic.addLayer(m);
     });
     UI.updateCounts({
       airports: Object.keys(this.airportIndex).length,
-      traffic: DataStore.traffic.length,
+      traffic: list.length,
       tfrs: (DataStore.wxbriefTfrs || DataStore.tfrs || []).length
     });
     if (document.getElementById('lyr-traffic')?.checked) {

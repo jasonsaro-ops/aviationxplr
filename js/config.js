@@ -4,7 +4,7 @@ const CONFIG = {
   defaultCenter: [15, -80], // CONUS center
   defaultZoom: 3,
   minZoom: 3,
-  maxZoom: 18,
+  maxZoom: 18, // tiles overscale past native
 
   // Update cadence (ms)
   refreshInterval: 2 * 60 * 1000, // 2 minutes
@@ -19,15 +19,19 @@ const CONFIG = {
   // adsb.lol — primary live traffic (community ADS-B, no key)
   adsblolPoint: 'https://api.adsb.lol/v2/lat/{lat}/lon/{lon}/dist/{nm}',
   adsbfiPoint: 'https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{nm}',
+  // planes.fyi — CORS-enabled overhead ADS-B (primary)
+  planesFyiOverhead: 'https://api.planes.fyi/api/v1/overhead/?lat={lat}&lng={lon}&radius={nm}',
+  planesFyiAirportLive: 'https://api.planes.fyi/api/v1/airports/{icao}/adsb/live/',
   // Grid centers to cover CONUS (~250nm each)
   trafficGrid: [
-    { lat: 45, lon: -120 }, { lat: 40, lon: -100 }, { lat: 40, lon: -80 },
-    { lat: 30, lon: -95 }, { lat: 25, lon: -80 }, { lat: 20, lon: -100 },
-    { lat: 10, lon: -85 }, { lat: 0, lon: -60 }, { lat: -15, lon: -50 },
-    { lat: -23, lon: -46 }, { lat: -33, lon: -70 }, { lat: -34, lon: -58 },
-    { lat: 50, lon: -100 }, { lat: 55, lon: -120 }, { lat: 61, lon: -150 }
+    { lat: 40.7, lon: -74.0 }, { lat: 42.3, lon: -71.0 }, { lat: 39.0, lon: -77.5 },
+    { lat: 33.7, lon: -84.4 }, { lat: 25.8, lon: -80.3 }, { lat: 29.9, lon: -95.3 },
+    { lat: 32.9, lon: -97.0 }, { lat: 39.9, lon: -104.9 }, { lat: 33.9, lon: -118.4 },
+    { lat: 37.6, lon: -122.3 }, { lat: 47.5, lon: -122.3 }, { lat: 41.9, lon: -87.9 },
+    { lat: 45.5, lon: -73.6 }, { lat: 19.4, lon: -99.1 }, { lat: -23.4, lon: -46.5 },
+    { lat: -34.6, lon: -58.4 }, { lat: -33.4, lon: -70.6 }, { lat: 51.5, lon: -0.1 }
   ],
-  trafficRadiusNm: 350,
+  trafficRadiusNm: 100,
   // Bounding box for CONUS roughly to reduce payload
   openskyBbox: { lamin: -56.0, lomin: -170.0, lamax: 72.0, lomax: -30.0 },
 
@@ -48,6 +52,8 @@ const CONFIG = {
 
   // CORS proxy — free public relays so browser can reach OpenSky / FAA / AWC
   // Primary: corsproxy.io  | Fallback: allorigins
+  // Deploy worker/cors-proxy.js to Cloudflare and paste URL here (no trailing slash)
+  corsWorker: '',
   corsProxy: 'https://api.codetabs.com/v1/proxy?quest=',
   corsProxyFallback: 'https://api.allorigins.win/raw?url=',
   corsProxyAlt: 'https://corsproxy.io/?',
@@ -65,12 +71,14 @@ const CONFIG = {
     dark: {
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
       attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
-      maxZoom: 16
+      maxZoom: 18,
+      maxNativeZoom: 16
     },
     darkLabels: {
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
       attribution: '',
-      maxZoom: 16
+      maxZoom: 18,
+      maxNativeZoom: 16
     },
     osm: {
       url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',

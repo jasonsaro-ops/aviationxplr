@@ -60,5 +60,9 @@
     MapApp.renderAirports();
   });
 
+  if (!CONFIG.corsWorker) {
+    console.warn('[AviationXplr] Deploy worker/cors-proxy.js and set CONFIG.corsWorker for live ADS-B/METAR. See worker/README.md');
+  }
+
   console.log('%c AviationXplr ready ', 'background:#00d4ff;color:#001018;font-weight:bold;padding:4px 8px');
 })();

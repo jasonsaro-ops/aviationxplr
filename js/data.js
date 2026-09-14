@@ -12,30 +12,49 @@ const DataStore = {
   loading: { airports: false, traffic: false, tfrs: false },
 
   /** Fetch via CORS proxy (with fallback) so browser can reach OpenSky / FAA / AWC */
+
+
   async proxiedFetch(targetUrl) {
-    const proxies = [
-      (u) => (CONFIG.corsProxy || '') + encodeURIComponent(u),
-      (u) => (CONFIG.corsProxyFallback || '') + encodeURIComponent(u),
-      (u) => (CONFIG.corsProxyAlt || '') + encodeURIComponent(u),
-      (u) => u
-    ];
-    let lastErr;
-    for (const build of proxies) {
-      try {
-        const res = await fetch(build(targetUrl), {
-          method: 'GET',
-          headers: { 'Accept': 'application/json, text/plain, */*' }
-        });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        // reject HTML error pages from broken proxies
-        const ct = res.headers.get('content-type') || '';
-        if (ct.includes('text/html')) throw new Error('proxy returned HTML');
+    const strategies = [];
+
+    // 1) User-deployed Cloudflare Worker (reliable)
+    if (CONFIG.corsWorker) {
+      strategies.push(async (u) => {
+        const res = await fetch(CONFIG.corsWorker.replace(/\/$/, '') + '?url=' + encodeURIComponent(u));
+        if (!res.ok) throw new Error('worker ' + res.status);
         return res;
+      });
+    }
+
+    // 2) Public fallbacks (often rate-limited / blocked)
+    strategies.push(async (u) => {
+      const res = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(u) + '&disableCache=true');
+      if (!res.ok) throw new Error('allorigins ' + res.status);
+      const j = await res.json();
+      const body = j.contents;
+      if (body == null) throw new Error('allorigins empty');
+      return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    strategies.push(async (u) => {
+      const res = await fetch('https://corsproxy.org/?' + encodeURIComponent(u));
+      if (!res.ok) throw new Error('corsproxy.org ' + res.status);
+      return res;
+    });
+    strategies.push(async (u) => {
+      const res = await fetch(u, { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error('direct ' + res.status);
+      return res;
+    });
+
+    let lastErr;
+    for (const fn of strategies) {
+      try {
+        return await fn(targetUrl);
       } catch (e) {
         lastErr = e;
       }
     }
-    throw lastErr || new Error('All fetch attempts failed');
+    throw lastErr || new Error('All proxy strategies failed');
   },
 
   async loadAirports() {
@@ -67,11 +86,12 @@ const DataStore = {
 
   
 
+
   async fetchTraffic() {
     this.loading.traffic = true;
     const byHex = new Map();
     const grid = CONFIG.trafficGrid || [{ lat: 40, lon: -75 }];
-    const nm = CONFIG.trafficRadiusNm || 250;
+    const nm = Math.min(CONFIG.trafficRadiusNm || 100, 150); // planes.fyi radius in nm-ish
 
     const ingest = (list) => {
       (list || []).forEach(a => {
@@ -92,34 +112,48 @@ const DataStore = {
           track: a.track != null ? Number(a.track) : null,
           vrate: a.baro_rate != null ? Number(a.baro_rate) * 0.00508 : null,
           squawk: a.squawk || '',
-          category: a.category || ''
+          category: a.category || '',
+          source: 'planes.fyi'
         });
       });
     };
 
-    // Batch in groups of 4 to avoid proxy rate limits
-    const points = grid.slice();
-    for (let i = 0; i < points.length; i += 4) {
-      const batch = points.slice(i, i + 4);
-      await Promise.allSettled(batch.map(async (pt) => {
-        const paths = [
-          (CONFIG.adsbfiPoint || '').replace('{lat}', pt.lat).replace('{lon}', pt.lon).replace('{nm}', nm),
-          (CONFIG.adsblolPoint || '').replace('{lat}', pt.lat).replace('{lon}', pt.lon).replace('{nm}', nm)
-        ].filter(Boolean);
-        for (const url of paths) {
+    // Primary: planes.fyi direct (CORS-enabled)
+    const pfJobs = grid.map(async (pt) => {
+      const url = (CONFIG.planesFyiOverhead || '')
+        .replace('{lat}', pt.lat)
+        .replace('{lon}', pt.lon)
+        .replace('{nm}', nm);
+      try {
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const json = await res.json();
+        ingest(json.ac || json.aircraft || []);
+      } catch (e) {
+        console.warn('[Data] planes.fyi point failed', pt.lat, pt.lon, e.message);
+      }
+    });
+    await Promise.allSettled(pfJobs);
+
+    // Fallback: adsb.fi / adsb.lol via proxy if still empty
+    if (byHex.size < 5) {
+      const points = grid.slice(0, 4);
+      for (const pt of points) {
+        for (const tmpl of [CONFIG.adsbfiPoint, CONFIG.adsblolPoint]) {
+          if (!tmpl) continue;
+          const url = tmpl.replace('{lat}', pt.lat).replace('{lon}', pt.lon).replace('{nm}', 200);
           try {
             const res = await this.proxiedFetch(url);
             const json = await res.json();
             ingest(json.aircraft || json.ac || []);
-            return;
-          } catch (e) { /* try next source */ }
+            if (byHex.size > 20) break;
+          } catch (e) { /* continue */ }
         }
-      }));
-      if (byHex.size > 800) break; // enough for display
+      }
     }
 
     this.traffic = Array.from(byHex.values());
-    console.log('[Data] Traffic: ' + this.traffic.length + ' aircraft');
+    console.log('[Data] Traffic: ' + this.traffic.length + ' aircraft (planes.fyi)');
     this.loading.traffic = false;
     this.lastUpdate = new Date();
   },
