@@ -12,11 +12,13 @@ const CONFIG = {
   // Data paths (relative for GitHub Pages)
   airportsGeoJSON: 'data/namer_samer_airports.geojson',
   runwaysJSON: 'data/runways_by_ident.json',
+  frequenciesJSON: 'data/frequencies_by_ident.json',
 
   // Public APIs (client-side)
   openskyStates: 'https://opensky-network.org/api/states/all',
   // adsb.lol — primary live traffic (community ADS-B, no key)
   adsblolPoint: 'https://api.adsb.lol/v2/lat/{lat}/lon/{lon}/dist/{nm}',
+  adsbfiPoint: 'https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{nm}',
   // Grid centers to cover CONUS (~250nm each)
   trafficGrid: [
     { lat: 45, lon: -120 }, { lat: 40, lon: -100 }, { lat: 40, lon: -80 },
@@ -46,8 +48,9 @@ const CONFIG = {
 
   // CORS proxy — free public relays so browser can reach OpenSky / FAA / AWC
   // Primary: corsproxy.io  | Fallback: allorigins
-  corsProxy: 'https://corsproxy.io/?',
+  corsProxy: 'https://api.codetabs.com/v1/proxy?quest=',
   corsProxyFallback: 'https://api.allorigins.win/raw?url=',
+  corsProxyAlt: 'https://corsproxy.io/?',
 
   // Leidos 1800WXBRIEF Interactive Map public dataLayer
   // METAR category points + TFR polygons with full NOTAM text

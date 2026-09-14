@@ -24,6 +24,7 @@
 
   // Phase 2: runways in background (not blocking map)
   DataStore.loadRunways().catch(e => console.warn('Runways deferred load failed', e));
+  DataStore.loadFrequencies().catch(e => console.warn('Frequencies deferred load failed', e));
 
   // Live feeds
   async function refreshLive() {

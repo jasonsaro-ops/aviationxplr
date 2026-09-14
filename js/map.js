@@ -194,23 +194,46 @@ const MapApp = {
     paintChunk();
   },
 
-  highlightRunwayshighlightRunways(ident) {
+
+  highlightRunways(ident) {
     this.layers.runways.clearLayers();
-    const rwys = DataStore.getRunways(ident);
+    if (!ident) return;
+    const rwys = DataStore.getRunways(ident) || [];
     rwys.forEach(r => {
-      if (r.geometry && r.geometry.coordinates) {
-        const coords = r.geometry.coordinates.map(c => [c[1], c[0]]);
-        const line = L.polyline(coords, {
+      const geom = r.geometry;
+      if (!geom || !geom.coordinates || geom.coordinates.length < 2) return;
+      const coords = geom.coordinates.map(c => [c[1], c[0]]);
+      const line = L.polyline(coords, {
+        color: r.closed ? '#666' : '#00d4ff',
+        weight: 5,
+        opacity: 0.95,
+        lineCap: 'butt'
+      });
+      const label = (r.le_ident || '?') + '/' + (r.he_ident || '?');
+      line.bindTooltip(label + ' · ' + (r.length_ft || '?') + ' ft', { sticky: true, className: 'ax-tip' });
+      line.on('click', (e) => {
+        L.DomEvent.stopPropagation(e);
+        if (typeof UI !== 'undefined' && UI.showRunway) UI.showRunway(r, ident);
+      });
+      this.layers.runways.addLayer(line);
+      // endpoint markers for easier click
+      const ends = [coords[0], coords[coords.length - 1]];
+      const ids = [r.le_ident, r.he_ident];
+      ends.forEach((ll, i) => {
+        const mk = L.circleMarker(ll, {
+          radius: 5,
           color: '#00d4ff',
-          weight: 4,
-          opacity: 0.9
+          fillColor: '#001018',
+          fillOpacity: 1,
+          weight: 2
         });
-        line.bindTooltip(`${r.le_ident || ''}/${r.he_ident || ''} · ${r.length_ft || '?'} ft`, { permanent: false });
-        line.on('click', () => {
-          // already shown in panel
+        mk.bindTooltip((ids[i] || '') + '', { className: 'ax-tip' });
+        mk.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          if (typeof UI !== 'undefined' && UI.showRunway) UI.showRunway(r, ident);
         });
-        this.layers.runways.addLayer(line);
-      }
+        this.layers.runways.addLayer(mk);
+      });
     });
   },
 
@@ -231,8 +254,11 @@ const MapApp = {
     UI.updateCounts({
       airports: Object.keys(this.airportIndex).length,
       traffic: DataStore.traffic.length,
-      tfrs: DataStore.tfrs.length
+      tfrs: (DataStore.wxbriefTfrs || DataStore.tfrs || []).length
     });
+    if (document.getElementById('lyr-traffic')?.checked) {
+      this.map.addLayer(this.layers.traffic);
+    }
   },
 
   renderTFRs() {
@@ -366,11 +392,13 @@ const MapApp = {
       m.bindTooltip(c.id + ' · ' + c.name, { className: 'ax-tip' });
       m.on('click', () => {
         document.getElementById('panel-title').textContent = c.id + ' · ' + c.name + ' ARTCC';
-        document.getElementById('panel-body').innerHTML = '<div class="meta-grid">' +
+        let html = '<div class="meta-grid">' +
           '<span class="label">Facility</span><span class="value">' + c.id + '</span>' +
           '<span class="label">Name</span><span class="value">' + c.name + ' Center</span>' +
-          '<span class="label">Type</span><span class="value">ARTCC</span></div>' +
-          '<p style="color:var(--text-dim);font-size:11px;margin-top:8px">Facility location. Lateral boundaries vary by altitude stratum (FAA).</p>';
+          '<span class="label">Type</span><span class="value">ARTCC / ACC</span></div>';
+        if (typeof UI !== 'undefined' && UI.freqTableHtml) html += UI.freqTableHtml(c.id);
+        html += '<p style="color:var(--text-dim);font-size:11px;margin-top:8px">Facility location. Lateral boundaries vary by altitude stratum.</p>';
+        document.getElementById('panel-body').innerHTML = html;
         document.getElementById('info-panel').classList.remove('hidden');
       });
       this.layers.artcc.addLayer(m);
@@ -394,12 +422,14 @@ const MapApp = {
       circle.bindTooltip(t.id + ' · ' + t.name, { sticky: true, className: 'ax-tip' });
       circle.on('click', () => {
         document.getElementById('panel-title').textContent = t.id + ' · ' + t.name;
-        document.getElementById('panel-body').innerHTML = '<div class="meta-grid">' +
+        let html = '<div class="meta-grid">' +
           '<span class="label">ID</span><span class="value">' + t.id + '</span>' +
           '<span class="label">Name</span><span class="value">' + t.name + '</span>' +
           '<span class="label">Type</span><span class="value">TRACON / Approach</span>' +
-          '<span class="label">Approx. radius</span><span class="value">' + (t.radiusNm || 30) + ' nm</span>' +
-          '</div><p style="color:var(--text-dim);font-size:11px;margin-top:8px">Approximate coverage for awareness. Official boundaries are complex FAA polygons.</p>';
+          '<span class="label">Approx. radius</span><span class="value">' + (t.radiusNm || 30) + ' nm</span></div>';
+        if (typeof UI !== 'undefined' && UI.freqTableHtml) html += UI.freqTableHtml(t.id);
+        html += '<p style="color:var(--text-dim);font-size:11px;margin-top:8px">Approximate coverage. APP/DEP frequencies shown when published under this facility id.</p>';
+        document.getElementById('panel-body').innerHTML = html;
         document.getElementById('info-panel').classList.remove('hidden');
       });
       this.layers.tracon.addLayer(circle);
@@ -426,12 +456,14 @@ const MapApp = {
       m.bindTooltip(tw.id + ' TWR', { className: 'ax-tip' });
       m.on('click', () => {
         document.getElementById('panel-title').textContent = tw.id + ' · ' + tw.name;
-        document.getElementById('panel-body').innerHTML = '<div class="meta-grid">' +
+        let html = '<div class="meta-grid">' +
           '<span class="label">Facility</span><span class="value">' + tw.id + '</span>' +
           '<span class="label">Name</span><span class="value">' + tw.name + '</span>' +
           '<span class="label">Type</span><span class="value">Control Tower</span>' +
           '<span class="label">Position</span><span class="value">' + tw.lat.toFixed(4) + ', ' + tw.lon.toFixed(4) + '</span>' +
           '</div>';
+        if (typeof UI !== 'undefined' && UI.freqTableHtml) html += UI.freqTableHtml(tw.id);
+        document.getElementById('panel-body').innerHTML = html;
         document.getElementById('info-panel').classList.remove('hidden');
       });
       this.layers.towers.addLayer(m);

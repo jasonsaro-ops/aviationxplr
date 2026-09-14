@@ -14,9 +14,10 @@ const DataStore = {
   /** Fetch via CORS proxy (with fallback) so browser can reach OpenSky / FAA / AWC */
   async proxiedFetch(targetUrl) {
     const proxies = [
-      (u) => CONFIG.corsProxy + encodeURIComponent(u),
-      (u) => CONFIG.corsProxyFallback + encodeURIComponent(u),
-      (u) => u // last resort: direct (may fail CORS)
+      (u) => (CONFIG.corsProxy || '') + encodeURIComponent(u),
+      (u) => (CONFIG.corsProxyFallback || '') + encodeURIComponent(u),
+      (u) => (CONFIG.corsProxyAlt || '') + encodeURIComponent(u),
+      (u) => u
     ];
     let lastErr;
     for (const build of proxies) {
@@ -25,11 +26,13 @@ const DataStore = {
           method: 'GET',
           headers: { 'Accept': 'application/json, text/plain, */*' }
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        // reject HTML error pages from broken proxies
+        const ct = res.headers.get('content-type') || '';
+        if (ct.includes('text/html')) throw new Error('proxy returned HTML');
         return res;
       } catch (e) {
         lastErr = e;
-        console.warn('[Data] Proxy attempt failed:', e.message);
       }
     }
     throw lastErr || new Error('All fetch attempts failed');
@@ -63,63 +66,60 @@ const DataStore = {
   },
 
   
+
   async fetchTraffic() {
     this.loading.traffic = true;
     const byHex = new Map();
-    const grid = CONFIG.trafficGrid || [{ lat: 39.5, lon: -98, }];
+    const grid = CONFIG.trafficGrid || [{ lat: 40, lon: -75 }];
     const nm = CONFIG.trafficRadiusNm || 250;
-    const jobs = grid.map(async (pt) => {
-      const url = (CONFIG.adsblolPoint || '')
-        .replace('{lat}', pt.lat)
-        .replace('{lon}', pt.lon)
-        .replace('{nm}', nm);
-      try {
-        const res = await this.proxiedFetch(url);
-        const json = await res.json();
-        const list = json.ac || json.aircraft || [];
-        list.forEach(a => {
-          if (a.lat == null || a.lon == null) return;
-          const hex = (a.hex || a.icao24 || '').toLowerCase();
-          if (!hex || byHex.has(hex)) return;
-          byHex.set(hex, {
-            icao24: hex,
-            callsign: (a.flight || a.callsign || '').trim(),
-            reg: a.r || '',
-            type: a.t || a.type || '',
-            lon: a.lon,
-            lat: a.lat,
-            alt: a.alt_baro != null && a.alt_baro !== 'ground' ? Number(a.alt_baro) * 0.3048 : (a.alt_geom != null ? Number(a.alt_geom) * 0.3048 : null),
-            onGround: a.alt_baro === 'ground' || a.gs === 0,
-            velocity: a.gs != null ? Number(a.gs) * 0.514444 : null, // kt → m/s
-            track: a.track != null ? Number(a.track) : null,
-            vrate: a.baro_rate != null ? Number(a.baro_rate) * 0.00508 : (a.geom_rate != null ? Number(a.geom_rate) * 0.00508 : null),
-            squawk: a.squawk || '',
-            category: a.category || ''
-          });
+
+    const ingest = (list) => {
+      (list || []).forEach(a => {
+        if (a.lat == null || a.lon == null) return;
+        const hex = String(a.hex || a.icao24 || '').toLowerCase();
+        if (!hex || byHex.has(hex)) return;
+        const altFt = a.alt_baro === 'ground' ? 0 : (a.alt_baro != null ? Number(a.alt_baro) : (a.alt_geom != null ? Number(a.alt_geom) : null));
+        byHex.set(hex, {
+          icao24: hex,
+          callsign: String(a.flight || a.callsign || '').trim(),
+          reg: a.r || '',
+          type: a.t || a.desc || '',
+          lon: a.lon,
+          lat: a.lat,
+          alt: altFt != null ? altFt * 0.3048 : null,
+          onGround: a.alt_baro === 'ground',
+          velocity: a.gs != null ? Number(a.gs) * 0.514444 : null,
+          track: a.track != null ? Number(a.track) : null,
+          vrate: a.baro_rate != null ? Number(a.baro_rate) * 0.00508 : null,
+          squawk: a.squawk || '',
+          category: a.category || ''
         });
-      } catch (e) {
-        console.warn('[Data] traffic grid point failed', pt, e.message);
-      }
-    });
-    await Promise.allSettled(jobs);
-    this.traffic = Array.from(byHex.values());
-    // Fallback OpenSky if empty
-    if (!this.traffic.length) {
-      try {
-        const { lamin, lomin, lamax, lomax } = CONFIG.openskyBbox;
-        const url = `${CONFIG.openskyStates}?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`;
-        const res = await this.proxiedFetch(url);
-        const json = await res.json();
-        this.traffic = (json.states || []).filter(s => s[5] != null && s[6] != null).map(s => ({
-          icao24: s[0], callsign: (s[1] || '').trim(), country: s[2],
-          lon: s[5], lat: s[6], alt: s[7], onGround: s[8],
-          velocity: s[9], track: s[10], vrate: s[11], squawk: s[14]
-        }));
-      } catch (e2) {
-        console.warn('[Data] OpenSky fallback failed', e2.message);
-      }
+      });
+    };
+
+    // Batch in groups of 4 to avoid proxy rate limits
+    const points = grid.slice();
+    for (let i = 0; i < points.length; i += 4) {
+      const batch = points.slice(i, i + 4);
+      await Promise.allSettled(batch.map(async (pt) => {
+        const paths = [
+          (CONFIG.adsbfiPoint || '').replace('{lat}', pt.lat).replace('{lon}', pt.lon).replace('{nm}', nm),
+          (CONFIG.adsblolPoint || '').replace('{lat}', pt.lat).replace('{lon}', pt.lon).replace('{nm}', nm)
+        ].filter(Boolean);
+        for (const url of paths) {
+          try {
+            const res = await this.proxiedFetch(url);
+            const json = await res.json();
+            ingest(json.aircraft || json.ac || []);
+            return;
+          } catch (e) { /* try next source */ }
+        }
+      }));
+      if (byHex.size > 800) break; // enough for display
     }
-    console.log(`[Data] Traffic: ${this.traffic.length} aircraft`);
+
+    this.traffic = Array.from(byHex.values());
+    console.log('[Data] Traffic: ' + this.traffic.length + ' aircraft');
     this.loading.traffic = false;
     this.lastUpdate = new Date();
   },
@@ -221,6 +221,24 @@ const DataStore = {
       console.warn('[Data] SIGMET failed', e.message);
       this.sigmets = [];
     }
+  },
+
+
+  async loadFrequencies() {
+    try {
+      const res = await fetch(CONFIG.frequenciesJSON);
+      this.frequencies = await res.json();
+      console.log('[Data] Frequencies loaded for', Object.keys(this.frequencies).length, 'idents');
+    } catch (e) {
+      console.warn('[Data] Frequencies load failed', e);
+      this.frequencies = {};
+    }
+  },
+
+  getFrequencies(ident) {
+    if (!this.frequencies || !ident) return [];
+    const key = String(ident).toUpperCase();
+    return this.frequencies[key] || this.frequencies[key.replace(/^K/, '')] || [];
   },
 
   getRunways(ident) {

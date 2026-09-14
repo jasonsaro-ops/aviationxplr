@@ -12,6 +12,20 @@ const UI = {
     });
   },
 
+
+  freqTableHtml(ident) {
+    const list = (typeof DataStore !== 'undefined' && DataStore.getFrequencies)
+      ? DataStore.getFrequencies(ident) : [];
+    if (!list.length) {
+      return '<div class="freq-block"><div class="freq-title">RADIO FREQUENCIES</div><div class="freq-empty">No published frequencies for this facility.</div></div>';
+    }
+    let rows = list.map(f => {
+      const label = (f.desc && f.desc !== f.type) ? (f.type + ' · ' + f.desc) : f.type;
+      return '<div class="freq-row"><span class="freq-type">' + (label || '—') + '</span><span class="freq-mhz">' + (f.mhz || '—') + '</span></div>';
+    }).join('');
+    return '<div class="freq-block"><div class="freq-title">RADIO FREQUENCIES</div><div class="freq-list">' + rows + '</div></div>';
+  },
+
   updateClock() {
     const now = new Date();
     const z = now.toISOString().substr(11, 8) + ' Z';
@@ -106,6 +120,7 @@ const UI = {
       <button class="btn secondary" id="btn-metar" style="width:100%;margin-bottom:8px">FETCH METAR</button>
       <div id="metar-result"></div>`;
 
+    html += this.freqTableHtml(p.ident || p.icao || '');
     document.getElementById('panel-body').innerHTML = html;
     document.getElementById('info-panel').classList.remove('hidden');
 
@@ -125,9 +140,24 @@ const UI = {
         if (box) box.innerHTML = '<span style="color:var(--warn)">No METAR available or proxy blocked.</span>';
       }
     };
-    document.getElementById('btn-metar')?.addEventListener('click', upgradeWithMetar);
-    // auto-load once
-    upgradeWithMetar();
+    const bindRwyClicks = () => {
+      document.querySelectorAll('.rwy-chip, .rwy-card').forEach(el => {
+        el.style.cursor = 'pointer';
+        el.addEventListener('click', () => {
+          const id = el.getAttribute('data-rwy');
+          if (!id) return;
+          const rwy = (runways || []).find(r => r.le_ident === id || r.he_ident === id);
+          if (rwy && typeof MapApp !== 'undefined') MapApp.highlightRunways(p.ident);
+          if (rwy) UI.showRunway(rwy, p.ident);
+        });
+      });
+    };
+    bindRwyClicks();
+    document.getElementById('btn-metar')?.addEventListener('click', async () => {
+      await upgradeWithMetar();
+      bindRwyClicks();
+    });
+    upgradeWithMetar().then(() => bindRwyClicks());
   },
 
   showTraffic(ac) {
@@ -147,6 +177,27 @@ const UI = {
       <span class="label">Position</span><span class="value">${ac.lat?.toFixed(5)}, ${ac.lon?.toFixed(5)}</span>
     </div>
     <p style="color:var(--text-dim);font-size:11px;margin-top:10px">Source: OpenSky Network · Non-commercial research use.</p>`;
+    document.getElementById('panel-body').innerHTML = html;
+    document.getElementById('info-panel').classList.remove('hidden');
+  },
+
+
+  showRunway(r, airportIdent) {
+    const label = (r.le_ident || '?') + '/' + (r.he_ident || '?');
+    document.getElementById('panel-title').textContent = (airportIdent || '') + ' · RWY ' + label;
+    let html = '<div class="meta-grid">' +
+      '<span class="label">Runway</span><span class="value">' + label + '</span>' +
+      '<span class="label">Length</span><span class="value">' + (r.length_ft != null ? r.length_ft + ' ft' : '—') + '</span>' +
+      '<span class="label">Width</span><span class="value">' + (r.width_ft != null ? r.width_ft + ' ft' : '—') + '</span>' +
+      '<span class="label">Surface</span><span class="value">' + (r.surface || '—') + '</span>' +
+      '<span class="label">Lighted</span><span class="value">' + (r.lighted ? 'Yes' : 'No') + '</span>' +
+      '<span class="label">Closed</span><span class="value">' + (r.closed ? 'Yes' : 'No') + '</span>' +
+      '<span class="label">LE heading</span><span class="value">' + (r.le_heading != null ? r.le_heading + '°' : '—') + '</span>' +
+      '<span class="label">HE heading</span><span class="value">' + (r.he_heading != null ? r.he_heading + '°' : '—') + '</span>' +
+      '<span class="label">LE elev</span><span class="value">' + (r.le_elev != null ? r.le_elev + ' ft' : '—') + '</span>' +
+      '<span class="label">HE elev</span><span class="value">' + (r.he_elev != null ? r.he_elev + ' ft' : '—') + '</span>' +
+      '</div>';
+    if (airportIdent && this.freqTableHtml) html += this.freqTableHtml(airportIdent);
     document.getElementById('panel-body').innerHTML = html;
     document.getElementById('info-panel').classList.remove('hidden');
   },

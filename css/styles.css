@@ -474,3 +474,49 @@ html, body {
   border-right-width: 4px;
   border-bottom-width: 11px;
 }
+
+/* Radio frequencies */
+.freq-block {
+  margin-top: 12px;
+  border-top: 1px solid var(--border, #1e2a3a);
+  padding-top: 10px;
+}
+.freq-title {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--accent, #00d4ff);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.freq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.freq-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.freq-type {
+  color: var(--text-dim, #8a9bb0);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.freq-mhz {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #e8f0ff;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.freq-empty {
+  font-size: 11px;
+  color: var(--text-dim, #8a9bb0);
+}
