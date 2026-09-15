@@ -14,47 +14,22 @@ const DataStore = {
   /** Fetch via CORS proxy (with fallback) so browser can reach OpenSky / FAA / AWC */
 
 
+
   async proxiedFetch(targetUrl) {
-    const strategies = [];
-
-    // 1) User-deployed Cloudflare Worker (reliable)
+    // Prefer Cloudflare Worker exclusively when configured (avoids CORS noise)
     if (CONFIG.corsWorker) {
-      strategies.push(async (u) => {
-        const res = await fetch(CONFIG.corsWorker.replace(/\/$/, '') + '?url=' + encodeURIComponent(u));
-        if (!res.ok) throw new Error('worker ' + res.status);
-        return res;
-      });
-    }
-
-    // 2) Public fallbacks (often rate-limited / blocked)
-    strategies.push(async (u) => {
-      const res = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(u) + '&disableCache=true');
-      if (!res.ok) throw new Error('allorigins ' + res.status);
-      const j = await res.json();
-      const body = j.contents;
-      if (body == null) throw new Error('allorigins empty');
-      return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
-    });
-    strategies.push(async (u) => {
-      const res = await fetch('https://corsproxy.org/?' + encodeURIComponent(u));
-      if (!res.ok) throw new Error('corsproxy.org ' + res.status);
-      return res;
-    });
-    strategies.push(async (u) => {
-      const res = await fetch(u, { headers: { Accept: 'application/json' } });
-      if (!res.ok) throw new Error('direct ' + res.status);
-      return res;
-    });
-
-    let lastErr;
-    for (const fn of strategies) {
-      try {
-        return await fn(targetUrl);
-      } catch (e) {
-        lastErr = e;
+      const base = CONFIG.corsWorker.replace(/\/$/, '');
+      const res = await fetch(base + '?url=' + encodeURIComponent(targetUrl));
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error('worker ' + res.status + ' ' + txt.slice(0, 120));
       }
+      return res;
     }
-    throw lastErr || new Error('All proxy strategies failed');
+    // No worker: try direct (will fail CORS for most aviation APIs)
+    const res = await fetch(targetUrl, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error('direct ' + res.status);
+    return res;
   },
 
   async loadAirports() {
@@ -178,8 +153,18 @@ const DataStore = {
       const res = await this.proxiedFetch('https://tfr.faa.gov/tfrapi/getTfrList');
       const data = await res.json();
       const list = Array.isArray(data) ? data : (data.tfrs || data.items || data.data || []);
-      this.tfrs = list;
-      console.log('[Data] TFRs', list.length);
+      this.tfrs = list.map(item => ({
+        notam: item.notam_id || item.notam || item.NOTAM,
+        NOTAM: item.notam_id || item.notam,
+        type: item.type || 'TFR',
+        description: item.description || '',
+        facility: item.facility,
+        state: item.state,
+        gid: item.gid,
+        // list API has no geometry — markers placed via facility lookup when possible
+        raw: item
+      }));
+      console.log('[Data] TFRs', this.tfrs.length);
     } catch (e) {
       console.warn('[Data] TFR API failed', e.message);
       // Built-in demo polygons so layer is never empty (user sees something)
@@ -240,7 +225,8 @@ const DataStore = {
 
   async fetchPireps() {
     try {
-      const url = CONFIG.pirepApi || 'https://aviationweather.gov/api/data/pirep?format=json&age=2.0';
+      // AWC requires bbox or station+distance
+      const url = 'https://aviationweather.gov/api/data/pirep?format=json&age=2.0&bbox=-125,24,-66,50';
       const res = await this.proxiedFetch(url);
       const data = await res.json();
       this.pireps = Array.isArray(data) ? data : [];

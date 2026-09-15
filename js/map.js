@@ -523,6 +523,48 @@ sectionalIcon(p) {
     this.layers.radar.clearLayers();
   },
 
+
+  async loadMetarStations() {
+    if (!this.layers.metarDots) this.layers.metarDots = L.layerGroup();
+    this.layers.metarDots.clearLayers();
+    const b = this.map.getBounds();
+    const west = b.getWest(), south = b.getSouth(), east = b.getEast(), north = b.getNorth();
+    let list = [];
+    try {
+      list = await DataStore.fetchMetarBbox(west, south, east, north);
+    } catch (e) { console.warn(e); }
+    if (!list.length && DataStore.airports) {
+      const feats = (this._filteredFeatures && this._filteredFeatures()) || [];
+      for (let i = 0; i < feats.length && list.length < 50; i++) {
+        const p = feats[i].properties;
+        if (p.type !== 'large_airport' && p.type !== 'medium_airport') continue;
+        const c = feats[i].geometry.coordinates;
+        if (b.contains([c[1], c[0]])) {
+          list.push({ icaoId: p.icao || p.ident, lat: c[1], lon: c[0], name: p.name, rawOb: '' });
+        }
+      }
+    }
+    (list || []).forEach(m => {
+      const lat = m.lat ?? m.latitude;
+      const lon = m.lon ?? m.longitude;
+      if (lat == null || lon == null) return;
+      const mk = L.circleMarker([lat, lon], {
+        radius: 4, color: '#33ff66', weight: 1, fillColor: '#0a3', fillOpacity: 0.75
+      });
+      const id = m.icaoId || m.station_id || m.icao || '';
+      const raw = m.rawOb || m.raw_text || '';
+      mk.bindTooltip((id + ' METAR').trim(), { className: 'ax-tip' });
+      mk.on('click', () => {
+        document.getElementById('panel-title').textContent = id + ' METAR';
+        document.getElementById('panel-body').innerHTML =
+          '<div class="metar-box">' + String(raw || id).replace(/</g, '&lt;') + '</div>';
+        document.getElementById('info-panel').classList.remove('hidden');
+      });
+      this.layers.metarDots.addLayer(mk);
+    });
+    console.log('[Map] METAR markers', this.layers.metarDots.getLayers().length);
+  },
+
   renderTFRs() {
     this.layers.tfrs.clearLayers();
     const source = (DataStore.wxbriefTfrs && DataStore.wxbriefTfrs.length)
@@ -554,6 +596,35 @@ sectionalIcon(p) {
         drawn++;
       } catch (e) {}
     });
+    // If no polygons, place markers for list-only TFRs near facility ARTCC if known
+    if (drawn === 0 && source.length) {
+      const facilityXY = {
+        ZNY: [40.78, -73.1], ZBW: [42.36, -71.06], ZDC: [38.85, -77.04],
+        ZOB: [41.4, -81.85], ZAU: [41.98, -87.9], ZID: [39.87, -84.2],
+        ZTL: [33.64, -84.43], ZJX: [30.5, -81.7], ZMA: [25.8, -80.3],
+        ZHU: [29.98, -95.34], ZME: [35.04, -89.98], ZKC: [39.3, -94.71],
+        ZMP: [44.88, -93.22], ZDV: [39.86, -104.67], ZAB: [35.04, -106.61],
+        ZLA: [33.94, -118.4], ZOA: [37.62, -122.38], ZSE: [47.45, -122.3],
+        ZLC: [40.79, -111.98], ZFW: [32.9, -97.04], ZAN: [61.17, -150.0],
+        ZHN: [21.32, -157.92]
+      };
+      source.forEach((item, i) => {
+        const fac = item.facility || (item.raw && item.raw.facility);
+        const xy = facilityXY[fac];
+        if (!xy) return;
+        // slight offset so multiple TFRs at same center don't stack perfectly
+        const lat = xy[0] + (i % 5) * 0.08;
+        const lon = xy[1] + (Math.floor(i / 5) % 5) * 0.08;
+        const m = L.circleMarker([lat, lon], {
+          radius: 7, color: '#ff4060', fillColor: '#ff2040', fillOpacity: 0.7, weight: 2
+        });
+        const label = item.notam || item.NOTAM || 'TFR';
+        m.bindTooltip(label + ' · ' + (item.type || '') + ' · ' + (fac || ''), { className: 'ax-tip' });
+        m.on('click', () => UI.showTFR && UI.showTFR(item));
+        this.layers.tfrs.addLayer(m);
+        drawn++;
+      });
+    }
     console.log('[Map] TFRs drawn', drawn);
   },
 
@@ -582,6 +653,61 @@ sectionalIcon(p) {
         this.layers.sigmets.addLayer(layer);
       } catch (e) {}
     });
+  },
+
+
+  buildAirspaceLayer() {
+    if (!this.layers.airspace) this.layers.airspace = L.layerGroup();
+    this.layers.airspace.clearLayers();
+    const classB = [
+      { id: 'KPHL', lat: 39.872, lon: -75.241, r: 30 },
+      { id: 'KJFK', lat: 40.64, lon: -73.779, r: 30 },
+      { id: 'KEWR', lat: 40.692, lon: -74.169, r: 30 },
+      { id: 'KBOS', lat: 42.364, lon: -71.005, r: 30 },
+      { id: 'KORD', lat: 41.978, lon: -87.905, r: 30 },
+      { id: 'KATL', lat: 33.637, lon: -84.428, r: 30 },
+      { id: 'KLAX', lat: 33.942, lon: -118.408, r: 30 },
+      { id: 'KSFO', lat: 37.619, lon: -122.375, r: 30 },
+      { id: 'KDFW', lat: 32.897, lon: -97.038, r: 30 },
+      { id: 'KDEN', lat: 39.856, lon: -104.674, r: 30 },
+      { id: 'KMIA', lat: 25.795, lon: -80.287, r: 30 },
+      { id: 'KSEA', lat: 47.45, lon: -122.309, r: 30 },
+      { id: 'KIAD', lat: 38.944, lon: -77.456, r: 30 },
+      { id: 'KDCA', lat: 38.852, lon: -77.037, r: 20 },
+      { id: 'KCLT', lat: 35.214, lon: -80.943, r: 30 },
+      { id: 'KDTW', lat: 42.212, lon: -83.353, r: 30 },
+      { id: 'KMSP', lat: 44.882, lon: -93.222, r: 30 },
+      { id: 'KPHX', lat: 33.434, lon: -112.012, r: 30 },
+      { id: 'KLAS', lat: 36.08, lon: -115.152, r: 30 },
+      { id: 'KSLC', lat: 40.788, lon: -111.978, r: 30 }
+    ];
+    const classC = [
+      { id: 'KSYR', lat: 43.111, lon: -76.106, r: 10 },
+      { id: 'KTPA', lat: 27.975, lon: -82.533, r: 10 },
+      { id: 'KMCO', lat: 28.429, lon: -81.309, r: 10 },
+      { id: 'KSAN', lat: 32.733, lon: -117.189, r: 10 },
+      { id: 'KPDX', lat: 45.589, lon: -122.597, r: 10 },
+      { id: 'KSTL', lat: 38.749, lon: -90.37, r: 10 },
+      { id: 'KPIT', lat: 40.492, lon: -80.233, r: 10 }
+    ];
+    const nm = 1852;
+    classB.forEach(a => {
+      const c = L.circle([a.lat, a.lon], {
+        radius: a.r * nm, color: '#33ff66', weight: 1.2, dashArray: '4 6',
+        fillColor: '#33ff66', fillOpacity: 0.04
+      });
+      c.bindTooltip(a.id + ' Class B (approx)', { className: 'ax-tip' });
+      this.layers.airspace.addLayer(c);
+    });
+    classC.forEach(a => {
+      const c = L.circle([a.lat, a.lon], {
+        radius: a.r * nm, color: '#88ffaa', weight: 1, dashArray: '2 4',
+        fillColor: '#88ffaa', fillOpacity: 0.03
+      });
+      c.bindTooltip(a.id + ' Class C (approx)', { className: 'ax-tip' });
+      this.layers.airspace.addLayer(c);
+    });
+    console.log('[Map] Airspace rings', this.layers.airspace.getLayers().length);
   },
 
   buildArtccLayer() {
