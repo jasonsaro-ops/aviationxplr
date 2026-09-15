@@ -11,7 +11,9 @@ const MapApp = {
     towers: null,
     pireps: null,
     sigmets: null,
-    radar: null
+    radar: null,
+    airspace: null,
+    metarDots: null
   },
   airportIndex: {},
   filters: {
@@ -29,7 +31,7 @@ const MapApp = {
       maxZoom: CONFIG.maxZoom,
       zoomControl: true,
       attributionControl: true,
-      preferCanvas: true
+      preferCanvas: false
     });
 
     const tileOpts = (url, attr, nativeZ, maxZ) => L.tileLayer(url, {
@@ -69,6 +71,8 @@ const MapApp = {
     this.layers.pireps = L.layerGroup();
     this.layers.sigmets = L.layerGroup();
     this.layers.radar = L.layerGroup();
+    this.layers.airspace = L.layerGroup();
+    this.layers.metarDots = L.layerGroup();
     // FAA-style VFR sectional tiles (US coverage; free ArcGIS)
     this.layers.sectional = L.tileLayer(
       'https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}',
@@ -137,6 +141,20 @@ const MapApp = {
     bind('lyr-tfrs', this.layers.tfrs);
     bind('lyr-pirep', this.layers.pireps);
     bind('lyr-sigmet', this.layers.sigmets);
+    bind('lyr-airspace', this.layers.airspace);
+    bind('lyr-metar', this.layers.metarDots);
+    document.getElementById('lyr-airspace')?.addEventListener('change', (e) => {
+      if (e.target.checked) this.buildAirspaceLayer();
+    });
+    document.getElementById('lyr-artcc')?.addEventListener('change', (e) => {
+      if (e.target.checked) this.buildArtccLayer();
+    });
+    document.getElementById('lyr-tracon')?.addEventListener('change', (e) => {
+      if (e.target.checked) this.buildTraconLayer();
+    });
+    document.getElementById('lyr-towers')?.addEventListener('change', (e) => {
+      if (e.target.checked) this.buildTowerLayer();
+    });
 
     // Filters
     ['large','medium','small','heli','seaplane','scheduled'].forEach(key => {
@@ -166,7 +184,43 @@ const MapApp = {
   },
 
 
-  sectionalIcon(p) {
+  
+
+  atcIcon(p, withLabel) {
+    const type = p.type || '';
+    const label = (p.icao || p.ident || '').toUpperCase().substring(0, 4);
+    // Classic ATC: aircraft = triangle, airport = square, fix = triangle outline
+    let inner = '';
+    let box = 16;
+    if (type === 'large_airport') {
+      // Filled square + brightness (primary field)
+      inner = '<rect x="4" y="4" width="8" height="8" fill="#33ff66"/>';
+    } else if (type === 'medium_airport') {
+      inner = '<rect x="4" y="4" width="8" height="8" fill="none" stroke="#33ff66" stroke-width="1.8"/>';
+    } else if (type === 'heliport') {
+      inner = '<circle cx="8" cy="8" r="6" fill="none" stroke="#88ffaa" stroke-width="1.4"/>' +
+        '<text x="8" y="11" text-anchor="middle" font-size="8" font-family="monospace" font-weight="700" fill="#88ffaa">H</text>';
+    } else if (type === 'seaplane_base') {
+      inner = '<path d="M2 5 L8 13 L14 5" fill="none" stroke="#44ddaa" stroke-width="1.6"/>';
+    } else {
+      // small — diamond (rotated square)
+      inner = '<path d="M8 2 L14 8 L8 14 L2 8 Z" fill="none" stroke="#22aa44" stroke-width="1.4"/>';
+    }
+    const tag = (withLabel && label)
+      ? '<span class="atc-tag">' + label + '</span>'
+      : '';
+    const html = '<div class="atc-sym"><svg width="16" height="16" viewBox="0 0 16 16" overflow="visible">' +
+      inner + '</svg>' + tag + '</div>';
+    return L.divIcon({
+      className: 'atc-marker',
+      html: html,
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
+    });
+  },
+
+
+sectionalIcon(p) {
     const type = p.type || '';
     const scheduled = !!p.scheduled;
     const mag = '#e0208a';
@@ -302,19 +356,15 @@ const MapApp = {
     }
 
     const self = this;
+    const showLabels = zoom >= 9;
     for (let i = 0; i < draw.length; i++) {
       const f = draw[i];
       const p = f.properties;
       const [lon, lat] = f.geometry.coordinates;
-      const color = (CONFIG.airportColors && CONFIG.airportColors[p.type]) || '#8a9bb0';
-      const radius = p.type === 'large_airport' ? 5 : (p.type === 'medium_airport' ? 3.5 : 2.5);
-      const marker = L.circleMarker([lat, lon], {
-        radius,
-        color: '#0a0e14',
-        weight: 0.6,
-        fillColor: color,
-        fillOpacity: 0.92,
-        interactive: true
+      const marker = L.marker([lat, lon], {
+        icon: self.atcIcon(p, showLabels),
+        interactive: true,
+        keyboard: false
       });
       marker.feature = f;
       marker.on('click', () => {
@@ -342,7 +392,7 @@ const MapApp = {
       if (!geom || !geom.coordinates || geom.coordinates.length < 2) return;
       const coords = geom.coordinates.map(c => [c[1], c[0]]);
       const line = L.polyline(coords, {
-        color: r.closed ? '#666' : '#00d4ff', weight: 5, opacity: 0.95, lineCap: 'butt'
+        color: r.closed ? '#335544' : '#33ff66', weight: 4, opacity: 0.95, lineCap: 'butt'
       });
       const label = (r.le_ident || '?') + '/' + (r.he_ident || '?');
       line.bindTooltip(label + ' · ' + (r.length_ft || '?') + ' ft', { sticky: true, className: 'ax-tip' });
@@ -352,7 +402,7 @@ const MapApp = {
       });
       this.layers.runways.addLayer(line);
       [coords[0], coords[coords.length - 1]].forEach((ll, i) => {
-        const mk = L.circleMarker(ll, { radius: 5, color: '#00d4ff', fillColor: '#001018', fillOpacity: 1, weight: 2 });
+        const mk = L.circleMarker(ll, { radius: 4, color: '#33ff66', fillColor: '#001a0a', fillOpacity: 1, weight: 1.5 });
         mk.on('click', (e) => {
           L.DomEvent.stopPropagation(e);
           if (UI.showRunway) UI.showRunway(r, ident);
@@ -416,46 +466,42 @@ const MapApp = {
       this.layers.radar.clearLayers();
       if (this._radarFrames && this._radarFrames.length) {
         const fr = this._radarFrames[this._radarIdx % this._radarFrames.length];
-        const url = fr.url || (fr.host + fr.path + '/256/{z}/{x}/{y}/2/1_1.png');
-        const layer = L.tileLayer(url, {
-          opacity: 0.6,
+        const url = fr.url || ((fr.host || '') + (fr.path || '') + '/256/{z}/{x}/{y}/2/1_1.png');
+        this.layers.radar.addLayer(L.tileLayer(url, {
+          opacity: 0.65,
           attribution: 'Radar © RainViewer',
-          maxZoom: 12,
-          zIndex: 200
-        });
-        this.layers.radar.addLayer(layer);
+          maxZoom: 18,
+          maxNativeZoom: 7,
+          zIndex: 250
+        }));
       } else {
-        // CONUS NEXRAD fallback
+        // Iowa State NEXRAD — overscale past native to avoid "zoom not supported"
         this.layers.radar.addLayer(L.tileLayer(CONFIG.nexradTile, {
-          opacity: 0.55,
+          opacity: 0.6,
           attribution: 'NEXRAD · Iowa State',
-          maxZoom: 10,
-          zIndex: 200
+          maxZoom: 18,
+          maxNativeZoom: 8,
+          zIndex: 250
         }));
       }
     };
 
-    if (!this._radarFrames.length) {
-      // try load frames then start
-      this.initRadar().then(() => {
-        this._radarIdx = Math.max(0, this._radarFrames.length - 1);
-        paint();
-        if (this._radarFrames.length > 1) {
-          this._radarTimer = setInterval(() => {
-            this._radarIdx = (this._radarIdx + 1) % this._radarFrames.length;
-            paint();
-          }, 700);
-        }
-      });
-      return;
-    }
-
-    this._radarIdx = Math.max(0, this._radarFrames.length - 1);
-    paint();
-    this._radarTimer = setInterval(() => {
-      this._radarIdx = (this._radarIdx + 1) % this._radarFrames.length;
+    const run = () => {
+      this._radarIdx = Math.max(0, (this._radarFrames.length || 1) - 1);
       paint();
-    }, 700);
+      if (this._radarFrames.length > 1) {
+        this._radarTimer = setInterval(() => {
+          this._radarIdx = (this._radarIdx + 1) % this._radarFrames.length;
+          paint();
+        }, 700);
+      }
+    };
+
+    if (!this._radarFrames.length) {
+      this.initRadar().then(run);
+    } else {
+      run();
+    }
   },
 
   stopRadarLoop() {

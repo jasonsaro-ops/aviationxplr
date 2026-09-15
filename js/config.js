@@ -67,11 +67,12 @@ const CONFIG = {
     }
   },
 
+  // ATC / Pushing Tin phosphor palette
   airportColors: {
-    large_airport: '#00d4ff',
-    medium_airport: '#20e070',
-    small_airport: '#8a9bb0',
-    heliport: '#ffb020',
-    seaplane_base: '#60a0ff'
+    large_airport: '#33ff66',
+    medium_airport: '#22cc55',
+    small_airport: '#1a993f',
+    heliport: '#88ffaa',
+    seaplane_base: '#44ddaa'
   }
 };

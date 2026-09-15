@@ -656,3 +656,68 @@ button.res-link {
 .leaflet-tile-container img:not([src]) {
   visibility: hidden;
 }
+
+/* ——— Pushing Tin / ATC phosphor symbology ——— */
+.atc-marker {
+  background: transparent !important;
+  border: none !important;
+}
+.atc-sym {
+  position: relative;
+  filter: drop-shadow(0 0 2px #33ff66) drop-shadow(0 0 1px #000);
+}
+.atc-sym svg {
+  display: block;
+  overflow: visible;
+}
+.atc-tag {
+  position: absolute;
+  left: 12px;
+  top: -2px;
+  font-family: "JetBrains Mono", "Consolas", "Courier New", monospace;
+  font-size: 9px;
+  font-weight: 600;
+  color: #33ff66;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-shadow: 0 0 4px #0a0, 0 0 1px #000;
+  pointer-events: none;
+}
+
+/* Scope-like map vignette optional via body class */
+body.atc-scope #map {
+  background: #000 !important;
+}
+body.atc-scope .leaflet-container {
+  background: #020806;
+}
+
+/* Accent shift toward phosphor green */
+:root {
+  --accent: #33ff66;
+  --accent-dim: rgba(51, 255, 102, 0.15);
+}
+.brand-mark,
+.status-live,
+#btn-refresh,
+.layer-toggle input:checked + span,
+.res-link.primary {
+  /* inherits accent where variables used */
+}
+
+/* Force ATC symbols visible above tiles */
+.atc-marker {
+  background: transparent !important;
+  border: none !important;
+  z-index: 600 !important;
+}
+.atc-sym {
+  filter: drop-shadow(0 0 3px #33ff66) drop-shadow(0 0 1px #000);
+}
+.atc-tag {
+  left: 14px;
+  top: -1px;
+  font-size: 10px;
+  color: #33ff66 !important;
+  text-shadow: 0 0 6px #0f0, 0 1px 2px #000;
+}
