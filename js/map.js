@@ -165,6 +165,61 @@ const MapApp = {
     setTimeout(() => { try { this.map.invalidateSize(); } catch (e) {} }, 200);
   },
 
+
+  sectionalIcon(p) {
+    const type = p.type || '';
+    const scheduled = !!p.scheduled;
+    const mag = '#e0208a';
+    const cyan = '#00d4ff';
+    let size = 14;
+    let svg = '';
+    if (type === 'large_airport') {
+      size = 18;
+      svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 24 24">' +
+        '<circle cx="12" cy="12" r="7" fill="' + mag + '" stroke="' + mag + '" stroke-width="1.5"/>' +
+        '<circle cx="12" cy="12" r="3" fill="#0a0e14"/>' +
+        '<line x1="12" y1="2" x2="12" y2="6" stroke="' + mag + '" stroke-width="2"/>' +
+        '<line x1="12" y1="18" x2="12" y2="22" stroke="' + mag + '" stroke-width="2"/>' +
+        '<line x1="2" y1="12" x2="6" y2="12" stroke="' + mag + '" stroke-width="2"/>' +
+        '<line x1="18" y1="12" x2="22" y2="12" stroke="' + mag + '" stroke-width="2"/>' +
+        '</svg>';
+    } else if (type === 'medium_airport') {
+      size = 16;
+      const fill = scheduled ? mag : 'none';
+      svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 24 24">' +
+        '<circle cx="12" cy="12" r="6.5" fill="' + fill + '" stroke="' + mag + '" stroke-width="2"/>' +
+        '<line x1="12" y1="3" x2="12" y2="7" stroke="' + mag + '" stroke-width="1.8"/>' +
+        '<line x1="12" y1="17" x2="12" y2="21" stroke="' + mag + '" stroke-width="1.8"/>' +
+        '<line x1="3" y1="12" x2="7" y2="12" stroke="' + mag + '" stroke-width="1.8"/>' +
+        '<line x1="17" y1="12" x2="21" y2="12" stroke="' + mag + '" stroke-width="1.8"/>' +
+        '</svg>';
+    } else if (type === 'heliport') {
+      size = 14;
+      svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 24 24">' +
+        '<circle cx="12" cy="12" r="9" fill="none" stroke="' + mag + '" stroke-width="1.5"/>' +
+        '<text x="12" y="16" text-anchor="middle" font-size="11" font-weight="700" font-family="sans-serif" fill="' + mag + '">H</text>' +
+        '</svg>';
+    } else if (type === 'seaplane_base') {
+      size = 14;
+      svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 24 24">' +
+        '<path d="M6 14 Q12 8 18 14" fill="none" stroke="' + cyan + '" stroke-width="2"/>' +
+        '<path d="M5 17 Q12 12 19 17" fill="none" stroke="' + cyan + '" stroke-width="1.5"/>' +
+        '<circle cx="12" cy="10" r="2" fill="' + cyan + '"/>' +
+        '</svg>';
+    } else {
+      size = 10;
+      svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '" viewBox="0 0 24 24">' +
+        '<circle cx="12" cy="12" r="7" fill="none" stroke="' + mag + '" stroke-width="2.2"/>' +
+        '</svg>';
+    }
+    return L.divIcon({
+      className: 'sec-apt-icon',
+      html: svg,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size / 2]
+    });
+  },
+
   typeAllowed(type) {
     if (type === 'large_airport') return this.filters.large;
     if (type === 'medium_airport') return this.filters.medium;
@@ -177,7 +232,7 @@ const MapApp = {
   renderAirports() {
     this.layers.airports.clearLayers();
     this.airportIndex = {};
-    if (!DataStore.airports) return;
+    if (!DataStore.airports || !DataStore.airports.features) return;
     const features = DataStore.airports.features;
     const toAdd = [];
     for (let i = 0; i < features.length; i++) {
@@ -187,17 +242,30 @@ const MapApp = {
       if (this.filters.scheduled && !p.scheduled) continue;
       toAdd.push(f);
     }
-    const CHUNK = 2500;
+    const CHUNK = 4000;
     let idx = 0;
     const self = this;
+    const useIcons = toAdd.length < 8000; // sectional icons only when set is manageable
     function paintChunk() {
       const end = Math.min(idx + CHUNK, toAdd.length);
       for (; idx < end; idx++) {
         const f = toAdd[idx];
         const p = f.properties;
         const [lon, lat] = f.geometry.coordinates;
-        const icon = self.sectionalIcon(p);
-        const marker = L.marker([lat, lon], { icon, title: p.name || p.ident, keyboard: false });
+        let marker;
+        if (useIcons && typeof self.sectionalIcon === 'function') {
+          marker = L.marker([lat, lon], {
+            icon: self.sectionalIcon(p),
+            title: p.name || p.ident,
+            keyboard: false
+          });
+        } else {
+          const color = (CONFIG.airportColors && CONFIG.airportColors[p.type]) || '#8a9bb0';
+          const radius = p.type === 'large_airport' ? 4 : (p.type === 'medium_airport' ? 3 : 2);
+          marker = L.circleMarker([lat, lon], {
+            radius, color: '#0a0e14', weight: 0.5, fillColor: color, fillOpacity: 0.9
+          });
+        }
         marker.feature = f;
         marker.on('click', () => {
           UI.showAirport(f);
@@ -208,6 +276,10 @@ const MapApp = {
       }
       UI.updateCounts({ airports: idx, traffic: 0, tfrs: (DataStore.wxbriefTfrs || DataStore.tfrs || []).length });
       if (idx < toAdd.length) requestAnimationFrame(paintChunk);
+      else {
+        UI.setLive(true);
+        UI.setLastUpdate(new Date());
+      }
     }
     paintChunk();
   },
