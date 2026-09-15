@@ -27,7 +27,7 @@ const CONFIG = {
   // Iowa State NEXRAD (CONUS) — free tiles
   nexradTile: 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png',
 
-  corsWorker: '', // e.g. 'https://aviationxplr-proxy.YOUR_SUBDOMAIN.workers.dev',
+  corsWorker: 'https://aviationxplr-proxy.jasonsaro.workers.dev', // e.g. 'https://aviationxplr-proxy.YOUR_SUBDOMAIN.workers.dev',
   corsProxy: 'https://api.allorigins.win/get?url=',
 
   tiles: {
