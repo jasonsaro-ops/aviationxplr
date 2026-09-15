@@ -29,8 +29,9 @@ const UI = {
     let html = '<div class="chart-panel">';
     html += '<p class="chart-note">SkyVector blocks embedding (X-Frame-Options). Charts open via official links; FAA sectional tiles are drawn on the map.</p>';
     html += '<div class="resource-links">';
-    html += '<a class="res-link primary" href="' + skyApt + '" target="_blank" rel="noopener">Open SkyVector Airport ↗</a>';
-    html += '<a class="res-link primary" href="' + skyUrl + '" target="_blank" rel="noopener">SkyVector at coordinates ↗</a>';
+    html += '<a class="res-link primary" href="' + skyApt + '" target="_blank" rel="noopener" id="btn-sky-apt">Open SkyVector Airport ↗</a>';
+    html += '<a class="res-link primary" href="' + skyUrl + '" target="_blank" rel="noopener" id="btn-sky-ll">SkyVector chart at airport ↗</a>';
+    html += '<button type="button" class="res-link primary" id="btn-sky-popup">SkyVector popup window</button>';
     if (airnav) html += '<a class="res-link" href="' + airnav + '" target="_blank" rel="noopener">AirNav ↗</a>';
     if (faa) html += '<a class="res-link" href="' + faa + '" target="_blank" rel="noopener">FAA Airport Data ↗</a>';
     html += '<a class="res-link" href="https://www.notams.faa.gov/dinsQueryWeb/" target="_blank" rel="noopener">FAA NOTAMs ↗</a>';
@@ -54,19 +55,31 @@ const UI = {
 
     this.showDetail((icao || p.ident || 'Airport') + ' · Charts', html);
 
-    // Wire chart layer buttons
+    // Wire chart layer buttons + SkyVector popup
     setTimeout(() => {
       document.querySelectorAll('.btn-chart').forEach(btn => {
         btn.addEventListener('click', () => {
           const kind = btn.getAttribute('data-chart');
           if (typeof MapApp === 'undefined') return;
+          // remove other chart overlays first for clarity
+          [MapApp.layers.sectional, MapApp.layers.ifrlow, MapApp.layers.ifrhigh].forEach(l => {
+            try { if (MapApp.map.hasLayer(l)) MapApp.map.removeLayer(l); } catch (e) {}
+          });
           const layer = kind === 'sectional' ? MapApp.layers.sectional
             : kind === 'ifrlow' ? MapApp.layers.ifrlow
             : MapApp.layers.ifrhigh;
-          if (layer && !MapApp.map.hasLayer(layer)) MapApp.map.addLayer(layer);
-          MapApp.map.setView([lat, lon], kind === 'sectional' ? 9 : 7, { animate: true });
+          if (layer) MapApp.map.addLayer(layer);
+          MapApp.map.setView([lat, lon], kind === 'sectional' ? 10 : 7, { animate: true });
         });
       });
+      const pop = document.getElementById('btn-sky-popup');
+      if (pop) {
+        pop.addEventListener('click', () => {
+          const w = Math.min(1200, window.screen.width - 80);
+          const h = Math.min(900, window.screen.height - 80);
+          window.open(skyApt, 'skyvector', 'noopener,noreferrer,width=' + w + ',height=' + h + ',left=40,top=40');
+        });
+      }
     }, 50);
 
     // Auto-load sectional under the airport

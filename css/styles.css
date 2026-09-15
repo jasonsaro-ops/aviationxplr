@@ -614,3 +614,45 @@ button.res-link {
   cursor: pointer;
   font-family: inherit;
 }
+
+/* FAA sectional-inspired airport symbols */
+.sec-apt-icon {
+  background: transparent !important;
+  border: none !important;
+}
+.sec-apt-icon svg {
+  display: block;
+  filter: drop-shadow(0 0 1px #000) drop-shadow(0 1px 2px rgba(0,0,0,0.6));
+}
+.legend-sec {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  font-size: 10px;
+  color: #9aa8b8;
+}
+.legend-sec span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* value contrast fix */
+.meta-grid .value {
+  color: #e8f0f8 !important;
+  font-weight: 500;
+}
+.meta-grid .label {
+  color: #8a9bb0 !important;
+}
+.floating-panel.detail-panel {
+  width: min(360px, 92vw);
+  max-height: 70vh;
+  overflow: auto;
+}
+/* hide leaflet zoom-not-supported style messages if any overlay injects */
+.leaflet-tile-container img[src=""],
+.leaflet-tile-container img:not([src]) {
+  visibility: hidden;
+}

@@ -1,122 +1,146 @@
 # AviationXplr
 
-**Mission-critical North & South America aviation explorer**
+**Worldwide aviation situational display** for GitHub Pages — airports, runways, frequencies, FAA chart overlays, weather radar, and pilot resource links.
 
-Professional, real-time (as close as public sources allow) map of every airport across North and South America, runways, Temporary Flight Restrictions (TFRs), aviation weather (METAR), and live ADS-B traffic where available.
+Mission-critical dark UI. Client-side only (static hosting).
 
-Styled for operations / briefing use — dark theme, high contrast, clickable metadata panels, layer toggles, 2-minute auto-refresh.
-
-## Live Demo (GitHub Pages)
-
-After pushing to a GitHub repository, enable **Settings → Pages → Deploy from branch (main / root)**.
-
-Then open: `https://<your-username>.github.io/<repo-name>/`
+---
 
 ## Features
 
-- **All US airports** (large / medium / small / heliports / seaplane bases) from OurAirports public data
-- **Runway centerlines** drawn on click with length, width, surface, lighting, headings
-- **Floating metadata panels** — ICAO/IATA, elevation, municipality, links, full runway list, on-demand METAR
-- **Layer toggles**: Airports, Runways, Live Traffic (ADS-B), TFRs, METAR (on demand)
-- **Airport type filters** + “Scheduled service only”
-- **Search** by ICAO, IATA, local ident, name or city
-- **Auto-refresh every 2 minutes** for live layers
-- **Dark professional UI** suitable for mission briefings
+### Airports (worldwide)
+- ~72,000 facilities from [OurAirports](https://ourairports.com) (public domain)
+- Types: large / medium / small airports, heliports, seaplane bases
+- **FAA VFR sectional-inspired symbology** on the map:
+  - Large: filled magenta circle with ticks
+  - Medium: open or filled circle with ticks
+  - Small: open magenta circle
+  - Heliport: magenta “H”
+  - Seaplane: cyan water symbol
+- Filters: type + scheduled service only
 
-## Data Sources (all public)
+### Click an airport
+- Full metadata (ident, ICAO/IATA, elevation, country, region, coordinates)
+- **Runway & wind panel** (compass, components, pattern entry)
+- Runway centerlines drawn on the map (clickable)
+- **Radio frequencies** (TWR, GND, ATIS, APP, DEP, CTAF, UNICOM, …)
+- **Charts companion panel**:
+  - **SkyVector** airport + coordinate links (official site)
+  - AirNav, FAA airport data, NOTAMs
+  - One-click **VFR Sectional / IFR Low / IFR High** map overlays
+- Dual panels: airport info stays open while runway/chart detail shows beside it
 
-| Layer        | Source                          | Notes |
-|--------------|----------------------------------|-------|
-| Airports     | OurAirports (CSV → GeoJSON)      | Public domain, daily updates |
-| Runways      | OurAirports                      | Public domain |
-| TFRs         | FAA `tfr.faa.gov/tfrapi/exportTfrList` | Unauthenticated JSON list |
-| METAR        | AviationWeather.gov API          | Free, no key |
-| Live traffic | OpenSky Network REST API         | Free for non-commercial/research; **CORS often blocked in pure browser** |
+### Map basemaps
+- Dark Gray (Esri)
+- Satellite (Esri)
+- Topographic (Esri)
+- Streets (Esri)
+- OpenStreetMap
 
-### CORS & Live Traffic Limitations
+### Aeronautical chart overlays (FAA tiles)
+- **VFR Sectional**
+- **IFR Low**
+- **IFR High**  
 
-Most pure-browser deployments on GitHub Pages will receive **CORS errors** from OpenSky and sometimes from the FAA TFR endpoint. This is expected.
+US chart coverage via ArcGIS/FAA tile services. SkyVector cannot be embedded (`X-Frame-Options: SAMEORIGIN`); official SkyVector links open from the charts panel.
 
-**Workarounds for production / reliable live data:**
+### Weather radar
+- **RainViewer** global animated radar loop
+- **Iowa State NEXRAD** fallback (CONUS)
+- Toggle: *Weather Radar* (sidebar or layer control)
 
-1. Run a tiny CORS proxy (Cloudflare Worker, Vercel Edge, or local Node) that forwards the OpenSky / TFR requests.
-2. Feed the OpenSky network yourself → higher rate limits + better coverage.
-3. Use a commercial ADS-B provider (FlightAware AeroAPI, ADS-B Exchange paid, etc.) with your own key.
+### Airspace / facilities (reference)
+- ARTCC / ACC markers (US, Canada, LatAm hubs)
+- TRACON approximate coverage
+- Control tower markers + frequencies when published
 
-The application degrades gracefully: airports + runways always work offline from the bundled GeoJSON/JSON.
+### Not included
+- Live ADS-B / flight tracking (removed)
+- Embedded SkyVector web app (blocked by SkyVector; links provided)
+- Guaranteed METAR without a CORS proxy (AviationWeather.gov blocks browsers)
 
-## Project Structure
+---
+
+## Quick start (GitHub Pages)
+
+1. Create a repo (e.g. `aviationxplr`)
+2. Upload the contents of this project to the repo root (or `/docs`)
+3. Settings → Pages → deploy from branch `/` or `/docs`
+4. Open `https://YOUR_USER.github.io/aviationxplr/`
+
+Hard-refresh after updates (`Ctrl+Shift+R` / `Cmd+Shift+R`).
+
+---
+
+## Optional: CORS worker (METAR / some live feeds)
+
+Browser calls to AviationWeather.gov and 1800WXBRIEF fail CORS from GitHub Pages.
+
+1. Deploy `worker/cors-proxy.js` on [Cloudflare Workers](https://workers.cloudflare.com) (free)
+2. Set in `js/config.js`:
+   ```js
+   corsWorker: 'https://YOUR_WORKER.workers.dev',
+   ```
+3. Redeploy the site
+
+Radar tiles and static airport data work **without** the worker.
+
+---
+
+## Data sources
+
+| Data | Source |
+|------|--------|
+| Airports, runways, frequencies | OurAirports (public domain) |
+| VFR / IFR chart tiles | FAA via ArcGIS tile services |
+| Chart links | [SkyVector](https://skyvector.com), AirNav, FAA NFDC |
+| Global radar | [RainViewer](https://www.rainviewer.com) public API |
+| CONUS NEXRAD | Iowa State University MESONET |
+| METAR / TAF | AviationWeather.gov (proxy often required) |
+| Basemaps | Esri, OpenStreetMap |
+
+---
+
+## Project layout
 
 ```
 aviationxplr/
 ├── index.html
 ├── css/styles.css
 ├── js/
-│   ├── config.js      # endpoints, intervals, tile URLs
-│   ├── data.js        # loaders & live fetchers
-│   ├── map.js         # Leaflet + layers
-│   ├── ui.js          # panels, search, status
-│   └── app.js         # bootstrap
+│   ├── config.js      # endpoints, tile URLs
+│   ├── app.js         # bootstrap
+│   ├── map.js         # Leaflet map, layers, sectional symbols
+│   ├── data.js        # loaders & live fetches
+│   ├── ui.js          # panels, search, charts/SkyVector links
+│   ├── runway-panel.js
+│   └── airspace.js    # ARTCC / TRACON / towers
 ├── data/
-│   ├── us_airports.geojson   # ~42k airports (NA + SA)
-│   └── runways_by_ident.json
+│   ├── world_airports.geojson
+│   ├── runways_by_ident.json
+│   └── frequencies_by_ident.json
+├── worker/
+│   ├── cors-proxy.js
+│   └── README.md
 └── README.md
 ```
 
-## Local Development
+---
 
-```bash
-# Any static server
-npx serve .
-# or
-python -m http.server 8080
-```
+## Controls
 
-Open `http://localhost:8080`.
+- **Layer control** (top-right): basemaps + overlays  
+- **Sidebar**: airports, runways, radar, sectional, airspace, filters  
+- **Search**: ICAO / IATA / name / city  
+- **FIT WORLD**: reset view  
+- **FORCE REFRESH**: reload static layers / radar frames  
 
-## Updating Airport / Runway Data
+---
 
-```bash
-# Re-download and rebuild (requires Python 3)
-curl -sL https://davidmegginson.github.io/ourairports-data/airports.csv -o data/airports_full.csv
-curl -sL https://davidmegginson.github.io/ourairports-data/runways.csv -o data/runways_full.csv
-# Then re-run the filter scripts that produced us_airports.geojson and runways_by_ident.json
-```
+## License / attribution
 
-(The original generation commands are in the repository history / can be recreated from the Python one-liners used during build.)
+- OurAirports data: public domain (Unlicense)
+- Esri / OSM / FAA / RainViewer: respect their terms and attribution (shown on the map)
+- SkyVector® is a trademark of its owners; AviationXplr only links to their public site
 
-## Hosting on GitHub
-
-1. Create a new repository (e.g. `aviationxplr`).
-2. Upload the contents of this folder (or push via git).
-3. Settings → Pages → Source: Deploy from a branch → `main` / `/ (root)`.
-4. Wait 1–2 minutes; visit the Pages URL.
-
-No build step required — pure static HTML/CSS/JS + data files.
-
-## Disclaimer
-
-This is an **unofficial visualization** for education, research and situational awareness. It is **not** a certified aeronautical product. Do **not** use as a primary source for flight planning or ATC decisions. Always consult official FAA sources, charts, and NOTAM systems.
-
-OpenSky data is provided under their non-commercial research terms. TFRs and METARs are public government data; interpret with care.
-
-## License
-
-Code: MIT  
-Airport/runway data: Public Domain (OurAirports / Unlicense)  
-Map tiles: Esri World Dark Gray Canvas + Reference (no API key) · OpenStreetMap / Esri Imagery as attributed
-
-
-## Live ADS-B / METAR (required one-time setup)
-
-GitHub Pages cannot call aviation APIs from the browser (CORS). Deploy the included free Cloudflare Worker:
-
-1. Open [Cloudflare Workers](https://workers.cloudflare.com) → Create Worker
-2. Paste `worker/cors-proxy.js` → Deploy
-3. Set in `js/config.js`:
-   ```js
-   corsWorker: 'https://YOUR_NAME.workers.dev',
-   ```
-4. Push and hard-refresh
-
-Without this, airports, runways, frequencies, and airspace layers still work; live traffic/METAR/TFRs will not.
+Built for situational awareness and education — **not** a substitute for official charts, NOTAMs, or preflight briefing.

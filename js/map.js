@@ -32,25 +32,20 @@ const MapApp = {
       preferCanvas: false
     });
 
-    const esriDark = L.tileLayer(CONFIG.tiles.dark.url, {
-      attribution: CONFIG.tiles.dark.attribution,
-      maxZoom: 18, maxNativeZoom: 16
+    const tileOpts = (url, attr, nativeZ, maxZ) => L.tileLayer(url, {
+      attribution: attr || '',
+      maxZoom: maxZ || 18,
+      maxNativeZoom: nativeZ || 16,
+      errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
     });
+    const esriDark = tileOpts(CONFIG.tiles.dark.url, CONFIG.tiles.dark.attribution, 16, 18);
     const esriLabels = L.tileLayer(CONFIG.tiles.darkLabels.url, {
       attribution: '', maxZoom: 18, maxNativeZoom: 16, opacity: 0.85
     });
-    const esriImagery = L.tileLayer(CONFIG.tiles.imagery.url, {
-      attribution: CONFIG.tiles.imagery.attribution, maxZoom: 19
-    });
-    const esriTopo = L.tileLayer(CONFIG.tiles.topo.url, {
-      attribution: CONFIG.tiles.topo.attribution, maxZoom: 19
-    });
-    const esriStreets = L.tileLayer(CONFIG.tiles.streets.url, {
-      attribution: CONFIG.tiles.streets.attribution, maxZoom: 19
-    });
-    const osm = L.tileLayer(CONFIG.tiles.osm.url, {
-      attribution: CONFIG.tiles.osm.attribution, maxZoom: 19
-    });
+    const esriImagery = tileOpts(CONFIG.tiles.imagery.url, CONFIG.tiles.imagery.attribution, 19, 19);
+    const esriTopo = tileOpts(CONFIG.tiles.topo.url, CONFIG.tiles.topo.attribution, 19, 19);
+    const esriStreets = tileOpts(CONFIG.tiles.streets.url, CONFIG.tiles.streets.attribution, 19, 19);
+    const osm = tileOpts(CONFIG.tiles.osm.url, CONFIG.tiles.osm.attribution, 19, 19);
 
     const darkGroup = L.layerGroup([esriDark, esriLabels]);
     darkGroup.addTo(this.map);
@@ -77,15 +72,15 @@ const MapApp = {
     // FAA-style VFR sectional tiles (US coverage; free ArcGIS)
     this.layers.sectional = L.tileLayer(
       'https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 12, maxNativeZoom: 12, opacity: 0.95, attribution: 'FAA VFR Sectional' }
+      { maxZoom: 15, maxNativeZoom: 12, opacity: 1, attribution: 'FAA VFR Sectional', zIndex: 300 }
     );
     this.layers.ifrlow = L.tileLayer(
       'https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/IFR_Low/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 10, opacity: 0.95, attribution: 'FAA IFR Low' }
+      { maxZoom: 14, maxNativeZoom: 10, opacity: 1, attribution: 'FAA IFR Low', zIndex: 300 }
     );
     this.layers.ifrhigh = L.tileLayer(
       'https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/IFR_High/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 9, opacity: 0.95, attribution: 'FAA IFR High' }
+      { maxZoom: 13, maxNativeZoom: 9, opacity: 1, attribution: 'FAA IFR High', zIndex: 300 }
     );
 
     this.map.addLayer(this.layers.airports);
@@ -201,11 +196,8 @@ const MapApp = {
         const f = toAdd[idx];
         const p = f.properties;
         const [lon, lat] = f.geometry.coordinates;
-        const color = CONFIG.airportColors[p.type] || '#8a9bb0';
-        const radius = p.type === 'large_airport' ? 4 : (p.type === 'medium_airport' ? 3 : 2);
-        const marker = L.circleMarker([lat, lon], {
-          radius, color: '#0a0e14', weight: 0.6, fillColor: color, fillOpacity: 0.9
-        });
+        const icon = self.sectionalIcon(p);
+        const marker = L.marker([lat, lon], { icon, title: p.name || p.ident, keyboard: false });
         marker.feature = f;
         marker.on('click', () => {
           UI.showAirport(f);
@@ -252,11 +244,16 @@ const MapApp = {
   showAirportCharts(feature) {
     const p = feature.properties;
     const [lon, lat] = feature.geometry.coordinates;
-    // Enable sectional overlay and zoom for US-style chart context
-    if (!this.map.hasLayer(this.layers.sectional)) {
-      try { this.map.addLayer(this.layers.sectional); } catch (e) {}
-    }
-    this.map.setView([lat, lon], Math.min(10, Math.max(8, this.map.getZoom())), { animate: true });
+    // Always bring sectional online for chart context
+    try {
+      if (this.layers.sectional && !this.map.hasLayer(this.layers.sectional)) {
+        this.map.addLayer(this.layers.sectional);
+      }
+      const secCb = document.getElementById('lyr-sectional');
+      if (secCb) secCb.checked = true;
+    } catch (e) { console.warn(e); }
+    // Stay within sectional native comfort zone, then allow overscale
+    this.map.setView([lat, lon], 10, { animate: true });
   },
 
   focusAirport(feature) {
