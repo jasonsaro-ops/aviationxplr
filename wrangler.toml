@@ -1,0 +1,7 @@
+name = "aviationxplr-proxy"
+main = "worker/cors-proxy.js"
+compatibility_date = "2024-11-01"
+
+# Free workers.dev route is assigned on first deploy
+# After deploy, set js/config.js:
+#   corsWorker: "https://aviationxplr-proxy.<subdomain>.workers.dev"

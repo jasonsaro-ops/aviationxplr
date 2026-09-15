@@ -1,4 +1,4 @@
-/* AviationXplr bootstrap — worldwide, no ADS-B */
+/* AviationXplr bootstrap — worldwide */
 (async function () {
   'use strict';
 
@@ -13,7 +13,7 @@
 
   try {
     await DataStore.loadAirports();
-    MapApp._allFeatures = null; MapApp.renderAirports();
+    MapApp.renderAirports();
     UI.setLastUpdate(new Date());
     UI.setLive(true);
   } catch (e) {
@@ -24,14 +24,23 @@
   DataStore.loadRunways().catch(() => {});
   DataStore.loadFrequencies().catch(() => {});
 
-  async function refreshSlow() {
+  // Initial activation for default-checked live layers (TFR etc.)
+  setTimeout(async () => {
+    if (document.getElementById('lyr-tfrs')?.checked) {
+      try {
+        await DataStore.fetchTFRs();
+        MapApp.renderTFRs();
+        if (!MapApp.map.hasLayer(MapApp.layers.tfrs)) MapApp.map.addLayer(MapApp.layers.tfrs);
+      } catch (e) { console.warn(e); }
+    }
+  }, 1500);
+
+  document.getElementById('btn-refresh')?.addEventListener('click', async () => {
+    MapApp._allFeatures = null;
+    MapApp.renderAirports();
     const jobs = [];
     if (document.getElementById('lyr-tfrs')?.checked) {
-      jobs.push(
-        DataStore.fetchWxBrief()
-          .then(() => MapApp.renderTFRs())
-          .catch(() => {})
-      );
+      jobs.push(DataStore.fetchTFRs().then(() => MapApp.renderTFRs()));
     }
     if (document.getElementById('lyr-pirep')?.checked) {
       jobs.push(DataStore.fetchPireps().then(() => MapApp.renderPireps()));
@@ -39,19 +48,15 @@
     if (document.getElementById('lyr-sigmet')?.checked) {
       jobs.push(DataStore.fetchSigmets().then(() => MapApp.renderSigmets()));
     }
-    if (jobs.length) await Promise.allSettled(jobs);
-  }
-
-  setTimeout(refreshSlow, 2000);
-  setInterval(refreshSlow, CONFIG.refreshInterval || 120000);
-
-  document.getElementById('btn-refresh')?.addEventListener('click', () => {
-    refreshSlow();
-    MapApp._allFeatures = null; MapApp.renderAirports();
-    MapApp.initRadar().then(() => {
-      if (document.getElementById('lyr-radar')?.checked) MapApp.startRadarLoop();
-    });
+    if (document.getElementById('lyr-metar')?.checked) {
+      jobs.push(MapApp.loadMetarStations());
+    }
+    if (document.getElementById('lyr-radar')?.checked) {
+      jobs.push(MapApp.initRadar().then(() => MapApp.startRadarLoop()));
+    }
+    await Promise.allSettled(jobs);
+    UI.setLastUpdate(new Date());
   });
 
-  console.log('%c AviationXplr ready — worldwide ', 'background:#00d4ff;color:#001018;font-weight:bold;padding:4px 8px');
+  console.log('%c AviationXplr ready — worldwide ', 'background:#33ff66;color:#001008;font-weight:bold;padding:4px 8px');
 })();

@@ -15,6 +15,11 @@ const CONFIG = {
   metarApi: 'https://aviationweather.gov/api/data/metar',
   aviationweatherMetar: 'https://aviationweather.gov/api/data/metar',
   aviationweatherTaf: 'https://aviationweather.gov/api/data/taf',
+  tfrList: 'https://tfr.faa.gov/tfrapi/getTfrList',
+  tfrShapes: 'https://tfr.faa.gov/tfrapi/getTfrList',
+  pirepApi: 'https://aviationweather.gov/api/data/pirep?format=json&age=2.0',
+  sigmetApi: 'https://aviationweather.gov/api/data/airsigmet?format=json',
+  metarBbox: 'https://aviationweather.gov/api/data/metar?format=json&bbox={west},{south},{east},{north}',
 
   // RainViewer public weather maps (no key)
   rainviewerMaps: 'https://api.rainviewer.com/public/weather-maps.json',
@@ -22,7 +27,7 @@ const CONFIG = {
   // Iowa State NEXRAD (CONUS) — free tiles
   nexradTile: 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png',
 
-  corsWorker: '',
+  corsWorker: '', // e.g. 'https://aviationxplr-proxy.YOUR_SUBDOMAIN.workers.dev',
   corsProxy: 'https://api.allorigins.win/get?url=',
 
   tiles: {

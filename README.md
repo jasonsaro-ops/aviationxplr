@@ -72,6 +72,24 @@ Hard-refresh after updates (`Ctrl+Shift+R` / `Cmd+Shift+R`).
 
 ---
 
+
+## Cloudflare Worker (CORS proxy) — GitHub link
+
+Live METAR / TFR / PIREP / SIGMET need a tiny proxy. Deploy from this repo:
+
+1. Push repo to GitHub  
+2. Cloudflare dashboard → **Workers & Pages** → **Create** → connect **GitHub**  
+3. Select this repository  
+4. Use root `wrangler.toml` (builds `worker/cors-proxy.js` as `aviationxplr-proxy`)  
+5. After deploy, set in `js/config.js`:
+   ```js
+   corsWorker: 'https://aviationxplr-proxy.<your-subdomain>.workers.dev',
+   ```
+6. Commit & push; hard-refresh the site  
+
+Details: [`worker/README.md`](worker/README.md)
+
+
 ## Optional: CORS worker (METAR / some live feeds)
 
 Browser calls to AviationWeather.gov and 1800WXBRIEF fail CORS from GitHub Pages.

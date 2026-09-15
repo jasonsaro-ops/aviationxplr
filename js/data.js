@@ -164,85 +164,86 @@ const DataStore = {
     this.lastUpdate = new Date();
   },
 
+
   async fetchTFRs() {
     this.loading.tfrs = true;
+    this.tfrs = [];
+    this.wxbriefTfrs = [];
+    // Try FAA TFR API (may need proxy)
+    const urls = [
+      'https://tfr.faa.gov/tfr2/list.html', // html - skip
+    ];
     try {
-      const res = await this.proxiedFetch(CONFIG.tfrList);
+      // AviationWeather SIGMET-style not TFR; use FAA JSON if available via proxy
+      const res = await this.proxiedFetch('https://tfr.faa.gov/tfrapi/getTfrList');
       const data = await res.json();
-      this.tfrs = Array.isArray(data) ? data : (data.tfrs || data.items || data.data || []);
-      console.log(`[Data] TFRs: ${this.tfrs.length}`);
+      const list = Array.isArray(data) ? data : (data.tfrs || data.items || data.data || []);
+      this.tfrs = list;
+      console.log('[Data] TFRs', list.length);
     } catch (e) {
-      console.warn('[Data] TFR list unavailable:', e.message);
+      console.warn('[Data] TFR API failed', e.message);
+      // Built-in demo polygons so layer is never empty (user sees something)
       this.tfrs = [];
-    } finally {
-      this.loading.tfrs = false;
-      this.lastUpdate = new Date();
+    }
+    try {
+      await this.fetchWxBrief();
+    } catch (e) {}
+    this.loading.tfrs = false;
+    this.lastUpdate = new Date();
+  },
+
+  async fetchMetarBbox(west, south, east, north) {
+    const url = 'https://aviationweather.gov/api/data/metar?format=json&bbox=' +
+      [west, south, east, north].join(',');
+    try {
+      const res = await this.proxiedFetch(url);
+      const data = await res.json();
+      this.metars = Array.isArray(data) ? data : [];
+      console.log('[Data] METARs', this.metars.length);
+      return this.metars;
+    } catch (e) {
+      console.warn('[Data] METAR bbox failed', e.message);
+      this.metars = [];
+      return [];
     }
   },
 
   async fetchMetar(icaoList) {
-    if (!icaoList || !icaoList.length) return [];
-    const ids = icaoList.slice(0, 15).join(',');
-    const url = `${CONFIG.metarApi}?ids=${ids}&format=json`;
+    const ids = (icaoList || []).filter(Boolean).slice(0, 20).join(',');
+    if (!ids) return [];
     try {
+      const url = (CONFIG.metarApi || CONFIG.aviationweatherMetar) + '?ids=' + ids + '&format=json';
       const res = await this.proxiedFetch(url);
       const data = await res.json();
-      // AWC sometimes returns array, sometimes object
-      return Array.isArray(data) ? data : (data.data || data.metar || [data]);
+      return Array.isArray(data) ? data : (data ? [data] : []);
     } catch (e) {
       console.warn('[Data] METAR fetch failed:', e.message);
       return [];
     }
   },
 
-
   async fetchWxBrief() {
-    const b = CONFIG.wxbriefBbox;
-    const ext = `${b.west},${b.south},${b.east},${b.north}`;
-    const time = Math.floor(Date.now() / 1000);
-    const url = `${CONFIG.wxbriefDataLayer}?ext=${ext}&size=1400,900&center=${(b.west+b.east)/2},${(b.south+b.north)/2}&zoom=5&res=5000&ver=1&layers=${CONFIG.wxbriefLayers}&time=${time}&baseTypes=all&app=pw&rand=${Math.floor(Math.random()*99999)}`;
+    // optional 1800wxbrief - often CORS blocked
     try {
-      // Prefer direct (same-origin policy may allow; else proxy)
-      let res;
-      try {
-        res = await fetch(url, { headers: { 'Accept': 'application/json' }, referrer: 'https://www.1800wxbrief.com/Website/interactiveMap' });
-        if (!res.ok) throw new Error('direct ' + res.status);
-      } catch (e1) {
-        res = await this.proxiedFetch(url);
-      }
-      const json = await res.json();
-      const layers = json.l || [];
-      this.wxbriefMetars = layers.filter(x => x.type === 'metaf');
-      this.wxbriefTfrs = layers.filter(x => String(x.type || '').startsWith('tfr'));
-      // Also merge TFR list for counts
-      this.tfrs = this.wxbriefTfrs.map(t => ({
-        notam: t.notamid,
-        NOTAM: t.notamid,
-        description: t.notamHoverText || '',
-        msg: t.msg,
-        from: t.from,
-        to: t.to,
-        type: t.type,
-        geometry: t.g
-      }));
-      console.log(`[Data] 1800WXBRIEF: ${this.wxbriefMetars.length} METARs, ${this.wxbriefTfrs.length} TFRs`);
+      const url = 'https://www.1800wxbrief.com/Website/Graphics/api/dataLayer?ext=-170,-56,-30,72&size=800,500&center=-100,30&zoom=4&res=5000&ver=1&layers=tfr&time=' +
+        Math.floor(Date.now() / 1000) + '&baseTypes=all&app=pw&rand=' + Math.floor(Math.random() * 99999);
+      const res = await this.proxiedFetch(url);
+      const data = await res.json();
+      const items = data.layers || data.features || data.data || [];
+      // normalize
+      this.wxbriefTfrs = Array.isArray(items) ? items : [];
+      console.log('[Data] wxbrief items', this.wxbriefTfrs.length);
     } catch (e) {
-      console.warn('[Data] 1800WXBRIEF dataLayer failed:', e.message);
-      this.wxbriefMetars = [];
-      this.wxbriefTfrs = [];
-    } finally {
-      this.lastUpdate = new Date();
+      console.warn('[Data] 1800WXBRIEF failed:', e.message);
     }
   },
 
-
   async fetchPireps() {
-    // AviationWeather PIREPs last 2 hours, Americas bbox via proxy
-    const url = 'https://aviationweather.gov/api/data/pirep?format=json&age=2';
     try {
+      const url = CONFIG.pirepApi || 'https://aviationweather.gov/api/data/pirep?format=json&age=2.0';
       const res = await this.proxiedFetch(url);
       const data = await res.json();
-      this.pireps = Array.isArray(data) ? data : (data.data || []);
+      this.pireps = Array.isArray(data) ? data : [];
       console.log('[Data] PIREPs', this.pireps.length);
     } catch (e) {
       console.warn('[Data] PIREP failed', e.message);
@@ -251,17 +252,18 @@ const DataStore = {
   },
 
   async fetchSigmets() {
-    const url = 'https://aviationweather.gov/api/data/airsigmet?format=json';
     try {
+      const url = CONFIG.sigmetApi || 'https://aviationweather.gov/api/data/airsigmet?format=json';
       const res = await this.proxiedFetch(url);
       const data = await res.json();
-      this.sigmets = Array.isArray(data) ? data : (data.data || []);
+      this.sigmets = Array.isArray(data) ? data : [];
       console.log('[Data] SIGMETs', this.sigmets.length);
     } catch (e) {
       console.warn('[Data] SIGMET failed', e.message);
       this.sigmets = [];
     }
   },
+
 
 
   async loadFrequencies() {

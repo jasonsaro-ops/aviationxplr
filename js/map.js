@@ -117,45 +117,58 @@ const MapApp = {
     this.buildTowerLayer();
     this.initRadar();
 
-    // Sidebar toggles (sync with leaflet overlays where possible)
-    const bind = (id, layer) => {
+    
+    // Sidebar layer toggles — fetch/build on enable
+    const onToggle = async (id, layer, activator) => {
       const el = document.getElementById(id);
       if (!el) return;
-      el.addEventListener('change', (e) => {
-        if (e.target.checked) this.map.addLayer(layer);
-        else this.map.removeLayer(layer);
-        if (id === 'lyr-radar' && e.target.checked) this.startRadarLoop();
-        if (id === 'lyr-radar' && !e.target.checked) this.stopRadarLoop();
-      });
+      const apply = async () => {
+        if (el.checked) {
+          if (activator) await activator();
+          if (layer && !this.map.hasLayer(layer)) this.map.addLayer(layer);
+        } else {
+          if (layer && this.map.hasLayer(layer)) this.map.removeLayer(layer);
+          if (id === 'lyr-radar') this.stopRadarLoop();
+        }
+      };
+      el.addEventListener('change', apply);
+      // Apply initial state for checked boxes
+      if (el.checked) apply();
     };
-    bind('lyr-airports', this.layers.airports);
-    bind('lyr-runways', this.layers.runways);
-    bind('lyr-radar', this.layers.radar);
-    document.getElementById('lyr-sectional')?.addEventListener('change', (e) => {
-      if (e.target.checked) this.map.addLayer(this.layers.sectional);
-      else this.map.removeLayer(this.layers.sectional);
+
+    onToggle('lyr-airports', this.layers.airports);
+    onToggle('lyr-runways', this.layers.runways);
+    onToggle('lyr-radar', this.layers.radar, async () => { await this.initRadar(); this.startRadarLoop(); });
+    onToggle('lyr-sectional', this.layers.sectional);
+    onToggle('lyr-tfrs', this.layers.tfrs, async () => {
+      await DataStore.fetchTFRs();
+      this.renderTFRs();
     });
-    bind('lyr-artcc', this.layers.artcc);
-    bind('lyr-tracon', this.layers.tracon);
-    bind('lyr-towers', this.layers.towers);
-    bind('lyr-tfrs', this.layers.tfrs);
-    bind('lyr-pirep', this.layers.pireps);
-    bind('lyr-sigmet', this.layers.sigmets);
-    bind('lyr-airspace', this.layers.airspace);
-    bind('lyr-metar', this.layers.metarDots);
-    document.getElementById('lyr-airspace')?.addEventListener('change', (e) => {
-      if (e.target.checked) this.buildAirspaceLayer();
+    onToggle('lyr-metar', this.layers.metarDots, async () => {
+      await this.loadMetarStations();
     });
-    document.getElementById('lyr-artcc')?.addEventListener('change', (e) => {
-      if (e.target.checked) this.buildArtccLayer();
+    onToggle('lyr-pirep', this.layers.pireps, async () => {
+      await DataStore.fetchPireps();
+      this.renderPireps();
     });
-    document.getElementById('lyr-tracon')?.addEventListener('change', (e) => {
-      if (e.target.checked) this.buildTraconLayer();
+    onToggle('lyr-sigmet', this.layers.sigmets, async () => {
+      await DataStore.fetchSigmets();
+      this.renderSigmets();
     });
-    document.getElementById('lyr-towers')?.addEventListener('change', (e) => {
-      if (e.target.checked) this.buildTowerLayer();
+    onToggle('lyr-airspace', this.layers.airspace, async () => {
+      this.buildAirspaceLayer();
+    });
+    onToggle('lyr-artcc', this.layers.artcc, async () => {
+      this.buildArtccLayer();
+    });
+    onToggle('lyr-tracon', this.layers.tracon, async () => {
+      this.buildTraconLayer();
+    });
+    onToggle('lyr-towers', this.layers.towers, async () => {
+      this.buildTowerLayer();
     });
 
+    // Filters
     // Filters
     ['large','medium','small','heli','seaplane','scheduled'].forEach(key => {
       const id = key === 'heli' ? 'flt-heli' : (key === 'seaplane' ? 'flt-seaplane' : (key === 'scheduled' ? 'flt-scheduled' : 'flt-' + key));
@@ -512,17 +525,36 @@ sectionalIcon(p) {
 
   renderTFRs() {
     this.layers.tfrs.clearLayers();
-    const source = (DataStore.wxbriefTfrs && DataStore.wxbriefTfrs.length) ? DataStore.wxbriefTfrs : (DataStore.tfrs || []);
-    source.forEach((t) => {
-      const geom = t.g || t.geometry;
-      if (!geom || !geom.coordinates) return;
+    const source = (DataStore.wxbriefTfrs && DataStore.wxbriefTfrs.length)
+      ? DataStore.wxbriefTfrs
+      : (DataStore.tfrs || []);
+    let drawn = 0;
+    source.forEach((item) => {
+      let geom = item.g || item.geometry || item.geom;
+      if (!geom && item.lat != null && item.lon != null) {
+        // point TFR — draw circle
+        const r = (item.radiusNm || item.radius || 5) * 1852;
+        const c = L.circle([item.lat, item.lon], {
+          radius: r, color: '#ff4060', fillColor: '#ff4060', fillOpacity: 0.2, weight: 2
+        });
+        c.bindTooltip(item.notam || item.NOTAM || 'TFR', { className: 'ax-tip' });
+        c.on('click', () => UI.showTFR && UI.showTFR(item));
+        this.layers.tfrs.addLayer(c);
+        drawn++;
+        return;
+      }
+      if (!geom) return;
       try {
-        const color = (t.type === 'tfrp') ? '#ff4060' : '#20c0c0';
-        const layer = L.geoJSON(geom, { style: { color, fillColor: color, fillOpacity: 0.2, weight: 2 } });
-        layer.on('click', () => UI.showTFR && UI.showTFR(t));
+        if (typeof geom === 'string') geom = JSON.parse(geom);
+        const color = (item.type === 'tfrp' || item.type === 'TFR') ? '#ff4060' : '#ff6080';
+        const layer = L.geoJSON(geom, { style: { color, fillColor: color, fillOpacity: 0.22, weight: 2 } });
+        layer.bindTooltip(item.notam || item.NOTAM || item.id || 'TFR', { className: 'ax-tip' });
+        layer.on('click', () => UI.showTFR && UI.showTFR(item));
         this.layers.tfrs.addLayer(layer);
+        drawn++;
       } catch (e) {}
     });
+    console.log('[Map] TFRs drawn', drawn);
   },
 
   renderPireps() {
@@ -557,7 +589,7 @@ sectionalIcon(p) {
     this.layers.artcc.clearLayers();
     const centers = [...(AirspaceData.artcc || []), ...(AirspaceData.canadaAcc || []), ...(AirspaceData.latamAcc || [])];
     centers.forEach(c => {
-      const m = L.circleMarker([c.lat, c.lon], { radius: 5, color: '#9b7bff', weight: 1.5, fillColor: '#7c5cff', fillOpacity: 0.85 });
+      const m = L.circleMarker([c.lat, c.lon], { radius: 6, color: '#33ff66', weight: 1.5, fillColor: '#1a5', fillOpacity: 0.9 });
       m.bindTooltip(c.id + ' · ' + c.name, { className: 'ax-tip' });
       m.on('click', () => {
         let html = '<div class="meta-grid"><span class="label">Facility</span><span class="value">' + c.id + '</span>' +
@@ -597,7 +629,7 @@ sectionalIcon(p) {
     if (typeof AirspaceData === 'undefined' || !AirspaceData.towers) return;
     this.layers.towers.clearLayers();
     AirspaceData.towers.forEach(tw => {
-      const m = L.circleMarker([tw.lat, tw.lon], { radius: 3.5, color: '#f0c040', weight: 1, fillColor: '#f0c040', fillOpacity: 0.95 });
+      const m = L.circleMarker([tw.lat, tw.lon], { radius: 4, color: '#33ff66', weight: 1, fillColor: '#33ff66', fillOpacity: 0.95 });
       m.bindTooltip(tw.id + ' TWR', { className: 'ax-tip' });
       m.on('click', () => {
         let html = '<div class="meta-grid"><span class="label">Facility</span><span class="value">' + tw.id + '</span>' +
