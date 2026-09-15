@@ -29,7 +29,7 @@ const MapApp = {
       maxZoom: CONFIG.maxZoom,
       zoomControl: true,
       attributionControl: true,
-      preferCanvas: false
+      preferCanvas: true
     });
 
     const tileOpts = (url, attr, nativeZ, maxZ) => L.tileLayer(url, {
@@ -229,59 +229,108 @@ const MapApp = {
     return false;
   },
 
+
   renderAirports() {
-    this.layers.airports.clearLayers();
-    this.airportIndex = {};
+    // Full rebuild only stores features; actual paint is viewport-based
     if (!DataStore.airports || !DataStore.airports.features) return;
-    const features = DataStore.airports.features;
-    const toAdd = [];
-    for (let i = 0; i < features.length; i++) {
-      const f = features[i];
+    this._allFeatures = null; // rebuild filtered list
+    this.paintVisibleAirports(true);
+    if (!this._viewportBound) {
+      this._viewportBound = true;
+      let t = null;
+      this.map.on('moveend', () => {
+        clearTimeout(t);
+        t = setTimeout(() => this.paintVisibleAirports(false), 120);
+      });
+      this.map.on('zoomend', () => {
+        clearTimeout(t);
+        t = setTimeout(() => this.paintVisibleAirports(false), 120);
+      });
+    }
+  },
+
+  _filteredFeatures() {
+    if (this._allFeatures) return this._allFeatures;
+    const out = [];
+    const feats = DataStore.airports.features;
+    for (let i = 0; i < feats.length; i++) {
+      const f = feats[i];
       const p = f.properties;
       if (!this.typeAllowed(p.type)) continue;
       if (this.filters.scheduled && !p.scheduled) continue;
-      toAdd.push(f);
+      out.push(f);
     }
-    const CHUNK = 4000;
-    let idx = 0;
+    this._allFeatures = out;
+    return out;
+  },
+
+  paintVisibleAirports(forceClear) {
+    if (!DataStore.airports) return;
+    const bounds = this.map.getBounds().pad(0.15);
+    const zoom = this.map.getZoom();
+    const list = this._filteredFeatures();
+
+    // Cap density by zoom
+    let maxPts = 2500;
+    if (zoom <= 3) maxPts = 400;
+    else if (zoom <= 5) maxPts = 900;
+    else if (zoom <= 7) maxPts = 1800;
+    else if (zoom <= 9) maxPts = 3000;
+    else maxPts = 5000;
+
+    if (forceClear || !this.layers.airports) {
+      this.layers.airports.clearLayers();
+      this.airportIndex = {};
+    } else {
+      this.layers.airports.clearLayers();
+      this.airportIndex = {};
+    }
+
+    const visible = [];
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i];
+      const c = f.geometry.coordinates;
+      if (bounds.contains([c[1], c[0]])) visible.push(f);
+    }
+
+    // Thin if too many
+    let draw = visible;
+    if (visible.length > maxPts) {
+      const step = Math.ceil(visible.length / maxPts);
+      draw = [];
+      for (let i = 0; i < visible.length; i += step) draw.push(visible[i]);
+    }
+
     const self = this;
-    const useIcons = toAdd.length < 8000; // sectional icons only when set is manageable
-    function paintChunk() {
-      const end = Math.min(idx + CHUNK, toAdd.length);
-      for (; idx < end; idx++) {
-        const f = toAdd[idx];
-        const p = f.properties;
-        const [lon, lat] = f.geometry.coordinates;
-        let marker;
-        if (useIcons && typeof self.sectionalIcon === 'function') {
-          marker = L.marker([lat, lon], {
-            icon: self.sectionalIcon(p),
-            title: p.name || p.ident,
-            keyboard: false
-          });
-        } else {
-          const color = (CONFIG.airportColors && CONFIG.airportColors[p.type]) || '#8a9bb0';
-          const radius = p.type === 'large_airport' ? 4 : (p.type === 'medium_airport' ? 3 : 2);
-          marker = L.circleMarker([lat, lon], {
-            radius, color: '#0a0e14', weight: 0.5, fillColor: color, fillOpacity: 0.9
-          });
-        }
-        marker.feature = f;
-        marker.on('click', () => {
-          UI.showAirport(f);
-          self.highlightRunways(p.ident);
-        });
-        self.layers.airports.addLayer(marker);
-        self.airportIndex[p.ident] = marker;
-      }
-      UI.updateCounts({ airports: idx, traffic: 0, tfrs: (DataStore.wxbriefTfrs || DataStore.tfrs || []).length });
-      if (idx < toAdd.length) requestAnimationFrame(paintChunk);
-      else {
-        UI.setLive(true);
-        UI.setLastUpdate(new Date());
-      }
+    for (let i = 0; i < draw.length; i++) {
+      const f = draw[i];
+      const p = f.properties;
+      const [lon, lat] = f.geometry.coordinates;
+      const color = (CONFIG.airportColors && CONFIG.airportColors[p.type]) || '#8a9bb0';
+      const radius = p.type === 'large_airport' ? 5 : (p.type === 'medium_airport' ? 3.5 : 2.5);
+      const marker = L.circleMarker([lat, lon], {
+        radius,
+        color: '#0a0e14',
+        weight: 0.6,
+        fillColor: color,
+        fillOpacity: 0.92,
+        interactive: true
+      });
+      marker.feature = f;
+      marker.on('click', () => {
+        UI.showAirport(f);
+        self.highlightRunways(p.ident);
+      });
+      self.layers.airports.addLayer(marker);
+      self.airportIndex[p.ident] = marker;
     }
-    paintChunk();
+    UI.updateCounts({
+      airports: draw.length,
+      traffic: 0,
+      tfrs: (DataStore.wxbriefTfrs || DataStore.tfrs || []).length
+    });
+    UI.setLive(true);
+    UI.setLastUpdate(new Date());
   },
 
   highlightRunways(ident) {
@@ -314,18 +363,9 @@ const MapApp = {
   },
 
   showAirportCharts(feature) {
-    const p = feature.properties;
+    // Charts stay off by default — user enables via panel buttons or layer control
     const [lon, lat] = feature.geometry.coordinates;
-    // Always bring sectional online for chart context
-    try {
-      if (this.layers.sectional && !this.map.hasLayer(this.layers.sectional)) {
-        this.map.addLayer(this.layers.sectional);
-      }
-      const secCb = document.getElementById('lyr-sectional');
-      if (secCb) secCb.checked = true;
-    } catch (e) { console.warn(e); }
-    // Stay within sectional native comfort zone, then allow overscale
-    this.map.setView([lat, lon], 10, { animate: true });
+    this.map.setView([lat, lon], Math.max(this.map.getZoom(), 11), { animate: true });
   },
 
   focusAirport(feature) {
@@ -342,7 +382,8 @@ const MapApp = {
       const data = await res.json();
       const host = data.host || 'https://tilecache.rainviewer.com';
       const frames = (data.radar && data.radar.past) ? data.radar.past : [];
-      this._radarFrames = frames.map(f => {
+      const pastSlice = frames.slice(-8);
+      this._radarFrames = pastSlice.map(f => {
         const path = typeof f.path === 'string' ? f.path : (f.path && f.path.path) || '';
         return {
           path,

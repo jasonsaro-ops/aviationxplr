@@ -13,7 +13,7 @@
 
   try {
     await DataStore.loadAirports();
-    MapApp.renderAirports();
+    MapApp._allFeatures = null; MapApp.renderAirports();
     UI.setLastUpdate(new Date());
     UI.setLive(true);
   } catch (e) {
@@ -47,7 +47,7 @@
 
   document.getElementById('btn-refresh')?.addEventListener('click', () => {
     refreshSlow();
-    MapApp.renderAirports();
+    MapApp._allFeatures = null; MapApp.renderAirports();
     MapApp.initRadar().then(() => {
       if (document.getElementById('lyr-radar')?.checked) MapApp.startRadarLoop();
     });

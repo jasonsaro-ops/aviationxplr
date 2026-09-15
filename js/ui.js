@@ -82,7 +82,7 @@ const UI = {
       }
     }, 50);
 
-    // Auto-load sectional under the airport
+    // Zoom to airport only — chart tiles load when user picks a chart layer button
     if (typeof MapApp !== 'undefined' && MapApp.showAirportCharts) {
       MapApp.showAirportCharts(feature);
     }
@@ -241,9 +241,13 @@ const UI = {
 
     html += this.freqTableHtml(p.ident || p.icao || '');
     html += this.pilotResourcesHtml(p, feature);
+    html += '<div class="resource-links" style="margin-top:10px">';
+    html += '<button type="button" class="res-link primary" id="btn-open-charts">Charts · SkyVector · Sectional</button>';
+    html += '</div>';
     document.getElementById('panel-body').innerHTML = html;
-    // Charts companion panel (SkyVector links + enable sectional on map)
-    this.showChartPanel(p, feature);
+    document.getElementById('btn-open-charts')?.addEventListener('click', () => {
+      this.showChartPanel(p, feature);
+    });
     document.getElementById('info-panel').classList.remove('hidden');
 
     // Auto-fetch METAR and upgrade runway panel with wind

@@ -144,3 +144,11 @@ aviationxplr/
 - SkyVector® is a trademark of its owners; AviationXplr only links to their public site
 
 Built for situational awareness and education — **not** a substitute for official charts, NOTAMs, or preflight briefing.
+
+
+## Performance notes
+
+- Airports are drawn **only in the current map view** (viewport culling) and thinned by zoom level to keep memory down.
+- **Chart tiles are off by default** — open an airport → **Charts · SkyVector · Sectional** → choose VFR/IFR when needed.
+- Prefer **Large + Medium** filters; enabling every small field multiplies marker count.
+- Canvas renderer is used for markers. Expect lower RAM than full-world divIcon markers.
